@@ -1,0 +1,144 @@
+
+name: Deploy Kisan Dost Frontend
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: kisandost-frontend-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and Deploy Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.AZURE_VM_HOST }}
+          VM_USER: ${{ secrets.AZURE_VM_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.AZURE_VM_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.AZURE_VM_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy to Azure VM
+        env:
+          VM_HOST: ${{ secrets.AZURE_VM_HOST }}
+          VM_USER: ${{ secrets.AZURE_VM_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
+            "$VM_USER@$VM_HOST" 'bash -s' <<'REMOTE'
+
+          set -Eeuo pipefail
+
+          APP_DIR="/home/azureuser/kisandost/Frontend"
+          RELEASES_DIR="/home/azureuser/kisandost/frontend-releases"
+
+          mkdir -p "$RELEASES_DIR"
+
+          echo "Fetching latest frontend code..."
+
+          git -C "$APP_DIR" fetch origin main
+
+          COMMIT=$(git -C "$APP_DIR" rev-parse origin/main)
+          RELEASE="$RELEASES_DIR/$COMMIT"
+
+          echo "Deploying commit: $COMMIT"
+
+          BUILD_DIR=""
+
+          cleanup() {
+            if [ -n "$BUILD_DIR" ] && [ -d "$BUILD_DIR" ]; then
+              rm -rf "$BUILD_DIR"
+            fi
+          }
+
+          trap cleanup EXIT
+
+          # Build only if this release does not already exist.
+          if [ ! -s "$RELEASE/dist/index.html" ]; then
+
+            echo "Preparing new release..."
+
+            BUILD_DIR=$(mktemp -d "$RELEASES_DIR/.build-${COMMIT}-XXXXXX")
+
+            git -C "$APP_DIR" archive "$COMMIT" | tar -x -C "$BUILD_DIR"
+
+            echo "Installing dependencies..."
+
+            npm ci --prefix "$BUILD_DIR"
+
+            echo "Building React frontend..."
+
+            npm run build --prefix "$BUILD_DIR"
+
+            if [ ! -s "$BUILD_DIR/dist/index.html" ]; then
+              echo "Build failed: dist/index.html not found."
+              exit 1
+            fi
+
+            chmod -R a+rX "$BUILD_DIR/dist"
+
+            mkdir -p "$RELEASE"
+
+            mv "$BUILD_DIR/dist" "$RELEASE/dist"
+
+            rm -rf "$BUILD_DIR"
+            BUILD_DIR=""
+
+            echo "New release prepared successfully."
+
+          else
+
+            echo "Release already exists. Reusing it."
+
+          fi
+
+          # Remember the currently active release for rollback.
+          PREVIOUS=$(readlink -f "$APP_DIR/current" || true)
+
+          # Prepare and atomically activate the new release.
+          rm -f "$APP_DIR/current.next"
+
+          ln -s "$RELEASE/dist" "$APP_DIR/current.next"
+          mv -Tf "$APP_DIR/current.next" "$APP_DIR/current"
+
+          echo "New release activated."
+
+          # Verify the website.
+          if ! curl --fail --silent --show-error \
+            http://127.0.0.1/ -o /dev/null; then
+
+            echo "Deployment verification failed."
+
+            # Restore the previous release.
+            if [ -n "$PREVIOUS" ] && [ -d "$PREVIOUS" ]; then
+              ln -s "$PREVIOUS" "$APP_DIR/current.rollback"
+              mv -Tf "$APP_DIR/current.rollback" "$APP_DIR/current"
+              echo "Previous frontend release restored."
+            fi
+
+            exit 1
+          fi
+
+          echo "Frontend deployment successful."
+          echo "Active release: $COMMIT"
+
+          REMOTE
+
+      - name: Deployment completed
+        run: echo "Kisan Dost frontend deployment completed successfully."
