@@ -176,6 +176,7 @@ const MobileStepForm = memo<MobileStepProps>(
             >
               <span>{t('auth.mobileLabel')}</span>
             </label>
+            {/* test */}
             <div className="flex items-center rounded-xl border border-[#d5e7db] bg-[#F8FAF7] focus-within:border-[#113E2E] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#113E2E]/15 transition overflow-hidden">
               <select
                 id="auth-mobile-country-code"
