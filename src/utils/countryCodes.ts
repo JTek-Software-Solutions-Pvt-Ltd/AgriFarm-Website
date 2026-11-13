@@ -32,12 +32,10 @@ export const getCountry = (iso: string) =>
 export const isValidNational = (c: Country, digits: string) =>
   digits.length >= c.min && digits.length <= c.max;
 
-/** ('+91' country, '9553737309') -> '+919553737309' */
 export const toE164 = (c: Country, digits: string) => `${c.dial}${digits}`;
 
 const BY_DIAL_LENGTH = [...COUNTRIES].sort((a, b) => b.dial.length - a.dial.length);
 
-/** '+919553737309' (or legacy 10-digit) -> { country, national } */
 export const splitE164 = (phone: string): { country: Country; national: string } => {
   const clean = (phone || '').replace(/[^\d+]/g, '');
   if (clean.startsWith('+')) {
@@ -51,7 +49,6 @@ export const splitE164 = (phone: string): { country: Country; national: string }
   };
 };
 
-/** For display: '+91 9553737309' */
 export const formatPhone = (phone: string) => {
   const { country, national } = splitE164(phone);
   return national ? `${country.dial} ${national}` : '';
