@@ -9,6 +9,8 @@ import { ActiveTab, AiChatMessage, Language } from '../../../shared/types';
 import { useTranslation } from '../../../shared/i18n';
 import { useAppSelector } from '../../../app/store/hooks';
 import { selectAuthUser, selectIsAuthenticated } from '../../auth';
+import { selectWeatherUi } from '../../weather';
+import { formatLiveClockTime } from '../../../shared/utils/dateTime';
 
 interface DostAiModalProps {
   isOpen: boolean;
@@ -27,7 +29,18 @@ export const DostAiModal: React.FC<DostAiModalProps> = ({
   const { t, language, currentLanguage } = useTranslation();
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const user = useAppSelector(selectAuthUser);
+  const { location: weatherLocation, current: weatherCurrent, forecast: weatherForecast } = useAppSelector(selectWeatherUi);
   const farmerName = isAuthenticated && user ? user.name : 'Farmer';
+  const activeDistrict =
+    weatherLocation.district ||
+    user?.district ||
+    weatherLocation.label.split(',')[0].trim() ||
+    'Your Region';
+  const liveWind = Math.round(weatherCurrent?.wind_speed_10m ?? 14);
+  const liveGusts = Math.round(
+    Math.max(weatherCurrent?.wind_gusts_10m ?? 0, weatherForecast?.[0]?.wind_speed_10m_max ?? 0, liveWind + 10)
+  );
+  const liveTemp = Math.round(weatherCurrent?.temperature_2m ?? 29);
 
   const getLocalizedGreeting = (): string => {
     const code = language.toLowerCase();
@@ -118,7 +131,7 @@ export const DostAiModal: React.FC<DostAiModalProps> = ({
         id: 'msg-initial',
         sender: 'assistant',
         text: getLocalizedGreeting(),
-        timestamp: '08:42 AM',
+        timestamp: formatLiveClockTime(new Date()),
         actions: getLocalizedSuggestions(),
       },
     ]);
@@ -152,11 +165,11 @@ export const DostAiModal: React.FC<DostAiModalProps> = ({
       const lower = query.toLowerCase();
       if (lower.includes('cyclone') || lower.includes('toofan') || lower.includes('తుఫాను') || lower.includes('चक्रवात') || lower.includes('rain') || lower.includes('వర్షం')) {
         if (language === 'TE') {
-          replyText = '⚠️ తుఫాను నివారణ కార్యాచరణ: బాస్మతి ప్లాట్ A లో మురుగు కాలువలను తక్షణమే 30 సెం.మీ లోతు వరకు తీయండి. మిర్చి ప్లాట్ B లో ఈదురుగాలులకు కొమ్మలు విరగకుండా వెదురు బొంగులతో కర్రలు కట్టండి. ఆదివారం వరకు నత్రజని ఎరువుల పిచికారీ నిలిపివేయండి.';
+          replyText = `⚠️ ${activeDistrict} వాతావరణ కార్యాచరణ (${liveTemp}°C, గాలి ${liveGusts} కి.మీ/గం): బాస్మతి ప్లాట్ A లో మురుగు కాలువలను తక్షణమే 30 సెం.మీ లోతు వరకు తనిఖీ చేయండి. మిర్చి ప్లాట్ B లో ఈదురుగాలులకు మొక్కలు పడిపోకుండా కర్రలు కట్టండి. పిచికారీ పనులను గాలి తగ్గే వరకు వాయిదా వేయండి.`;
         } else if (language === 'HI') {
-          replyText = '⚠️ चक्रवात सुरक्षा कार्ययोजना: बासमती प्लॉट A में जल निकासी नालियों को तुरंत 30 सेमी गहरा करें। मिर्च प्लॉट B में 85-95 किमी/घंटा हवाओं से पौधों को बचाने हेतु खूंटे बांधें। रविवार तक यूरिया/उर्वरक छिड़काव पूर्णतः स्थगित रखें।';
+          replyText = `⚠️ ${activeDistrict} मौसम कार्ययोजना (${liveTemp}°C, हवा के झोंके ${liveGusts} किमी/घंटा): बासमती प्लॉट A में जल निकासी नालियों की जांच करें। मिर्च प्लॉट B में तेज़ हवाओं से पौधों को बचाने हेतु सहारा दें। सुरक्षित मौसम होने तक छिड़काव स्थगित रखें।`;
         } else {
-          replyText = '⚠️ Cyclone Alert Action Plan: Deepen field outlet trenches to 30 cm depth in Paddy Parcel A immediately. For Chilli Parcel B, secure bamboo stakes to prevent twig breakage under 85-95 km/h gusts. Halt all urea/fertilizer spraying until Sunday clear weather.';
+          replyText = `⚠️ ${activeDistrict} Weather Action Plan (Live ${liveTemp}°C, Gusts up to ${liveGusts} km/h): Inspect field outlet trenches (30 cm depth) in Parcel A immediately. Secure crop supports in Parcel B if gusts exceed 35 km/h, and schedule spraying during low-wind morning windows.`;
         }
         actions = [
           { label: language === 'TE' ? 'తుఫాను రక్షణ మార్గదర్శకాలు' : language === 'HI' ? 'चक्रवात सुरक्षा चेकलिस्ट' : 'Open Cyclone Plan', tab: 'my-crops' },

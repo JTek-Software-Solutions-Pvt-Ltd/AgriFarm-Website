@@ -4,7 +4,9 @@ import { DISEASES_CATALOG } from '../../../shared/data/mockData';
 import { useTranslation } from '../../../shared/i18n';
 import { useAppDispatch, useAppSelector } from '../../../app/store/hooks';
 import { setActiveTab as setActiveTabAction } from '../../../app/store/uiSlice';
-import { selectIsAuthenticated } from '../../auth';
+import { selectAuthUser, selectIsAuthenticated } from '../../auth';
+import { selectWeatherUi } from '../../weather';
+import { getCurrentAgriSeason, useLiveNow } from '../../../shared/utils/dateTime';
 import {
   Search,
   X,
@@ -38,6 +40,13 @@ export const DiseasesLibraryView: React.FC<DiseasesLibraryViewProps> = ({
   const { t } = useTranslation();
   const dispatch = useAppDispatch();
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const user = useAppSelector(selectAuthUser);
+  const { location } = useAppSelector(selectWeatherUi);
+  const now = useLiveNow();
+  const activeDistrict =
+    location.district || user?.district || location.label.split(',')[0].trim() || 'Regional';
+  const activeSeason = getCurrentAgriSeason(now);
+
   const setActiveTab =
     onNavigateTab || propSetActiveTab || ((tab: ActiveTab) => dispatch(setActiveTabAction(tab)));
   void propOnOpenAiChat;
@@ -85,7 +94,7 @@ export const DiseasesLibraryView: React.FC<DiseasesLibraryViewProps> = ({
               {t('diseases.title')}
             </h1>
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-bold border border-amber-200">
-              Guntur Region • Kharif 2026
+              {activeDistrict} Region • {activeSeason}
             </span>
           </div>
           <p className="text-sm text-slate-600 leading-relaxed">
@@ -155,7 +164,7 @@ export const DiseasesLibraryView: React.FC<DiseasesLibraryViewProps> = ({
               ACTIVE REGIONAL ALERTS
             </span>
             <span className="font-serif font-bold text-base text-red-700 block">2 High Alert</span>
-            <span className="text-[11px] text-slate-500">Guntur &amp; Krishna district</span>
+            <span className="text-[11px] text-slate-500">{activeDistrict} &amp; neighbouring belt</span>
           </div>
         </div>
 
@@ -198,7 +207,7 @@ export const DiseasesLibraryView: React.FC<DiseasesLibraryViewProps> = ({
                 High Priority Field Alert
               </span>
               <h3 className="font-bold text-base text-slate-900">
-                Yellow Stem Borer Detected in Adjacent Tenali Mandal
+                Yellow Stem Borer Watch in {activeDistrict} Agricultural Belt
               </h3>
             </div>
             <p className="text-xs text-slate-700 leading-relaxed max-w-3xl">

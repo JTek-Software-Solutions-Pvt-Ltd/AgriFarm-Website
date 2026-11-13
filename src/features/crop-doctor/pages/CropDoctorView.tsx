@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ActiveTab } from '../../../shared/types';
 import { useTranslation } from '../../../shared/i18n';
 import { useAppDispatch, useAppSelector } from '../../../app/store/hooks';
@@ -13,6 +13,8 @@ import {
   selectAuthUser,
   selectIsAuthenticated,
 } from '../../auth';
+import { selectWeatherUi } from '../../weather';
+import { formatLiveClockTime, formatShortDateOffset, useLiveNow } from '../../../shared/utils/dateTime';
 
 interface CropDoctorViewProps {
   onOpenScanModal: () => void;
@@ -153,6 +155,14 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
   const dispatch = useAppDispatch();
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const user = useAppSelector(selectAuthUser);
+  const { location, current } = useAppSelector(selectWeatherUi);
+  const now = useLiveNow();
+
+  const activeDistrict = useMemo(
+    () => location.district || user?.district || location.label.split(',')[0].trim() || 'Regional',
+    [location.district, location.label, user?.district]
+  );
+
   const [selectedCase, setSelectedCase] = useState<SampleTest>(SAMPLE_TESTS[0]);
   const [acreage, setAcreage] = useState<number>(4.5);
   const [orderedToast, setOrderedToast] = useState<boolean>(false);
@@ -185,7 +195,9 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
           <span className="material-symbols-outlined text-[#E5B54F] text-2xl">check_circle</span>
           <div>
             <p className="font-bold text-sm">Prescription Kit Ordered Successfully!</p>
-            <p className="text-xs text-emerald-200">Express delivery dispatched to Guntur Farm Store. Total: ₹{costReq.toLocaleString('en-IN')}</p>
+            <p className="text-xs text-emerald-200">
+              Express delivery dispatched to {activeDistrict} Farm Store. Total: ₹{costReq.toLocaleString('en-IN')}
+            </p>
           </div>
         </div>
       )}
@@ -252,7 +264,9 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
           </div>
           <div>
             <p className="font-bold text-sm text-red-900">High Pest Alert: Spodoptera litura (Armyworm) detected in 25km radius</p>
-            <p className="text-xs text-red-800/80">Krishna &amp; Guntur district mandals reporting early leaf perforations in Chilli &amp; Maize parcels.</p>
+            <p className="text-xs text-red-800/80">
+              {activeDistrict} &amp; surrounding district mandals reporting early leaf perforations in Chilli &amp; Maize parcels.
+            </p>
           </div>
         </div>
         <button
@@ -401,7 +415,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
           </div>
 
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-slate-500 text-xs">
-            <span>Auto-calibration via GPS: Andhra Pradesh</span>
+            <span>Auto-calibration via GPS: {location.label}</span>
             <span className="material-symbols-outlined text-[18px] text-emerald-700">my_location</span>
           </div>
         </div>
@@ -418,13 +432,15 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
                   <span>·</span>
                   <span>{selectedCase.location}</span>
                   <span>·</span>
-                  <span>Captured Today, 08:42 AM</span>
+                  <span className="notranslate" translate="no">
+                    Captured Today, {formatLiveClockTime(new Date(now.getTime() - 45 * 60_000))}
+                  </span>
                 </>
               ) : (
                 <>
                   <span className="font-mono font-bold text-slate-700">SAMPLE DOSSIER</span>
                   <span>·</span>
-                  <span>Andhra &amp; Telangana Regional Reference</span>
+                  <span>{activeDistrict} Regional Reference</span>
                   <span>·</span>
                   <span>{selectedCase.crop}</span>
                 </>
@@ -518,8 +534,16 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
                 <span className="material-symbols-outlined text-[20px]">air</span>
               </div>
               <div className="text-left">
-                <p className="text-xs font-bold text-[#113E2E]">Current Weather Advisory</p>
-                <p className="text-xs text-slate-600 mt-0.5">Wind speed: 8 km/h • Humidity: 78% • Ideal spray window next 6 hours.</p>
+                <p className="text-xs font-bold text-[#113E2E]">Current Weather Advisory ({activeDistrict})</p>
+                <p className="text-xs text-slate-600 mt-0.5 tabular-nums">
+                  {current
+                    ? `Wind: ${current.wind_speed_10m} km/h • Humidity: ${current.relative_humidity_2m}% • ${
+                        current.wind_speed_10m <= 14 && current.precipitation === 0
+                          ? 'Ideal spray window.'
+                          : 'Monitor drift / rain before spraying.'
+                      }`
+                    : `Syncing spray telemetry for ${location.label}...`}
+                </p>
               </div>
             </div>
           </div>
@@ -676,7 +700,9 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
                       </div>
                       <div>
                         <p className="text-xs font-bold text-slate-800">Basmati Plot A • BLB Xanthomonas</p>
-                        <p className="text-[11px] text-slate-500">Oct 24 • Streptocycline applied</p>
+                        <p className="text-[11px] text-slate-500 notranslate" translate="no">
+                          {formatShortDateOffset(-3, false, now)} • Streptocycline applied
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4 self-end sm:self-auto">
@@ -696,7 +722,9 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
                       </div>
                       <div>
                         <p className="text-xs font-bold text-slate-800">Chilli Block B • Whitefly Nymphs</p>
-                        <p className="text-[11px] text-slate-500">Oct 16 • Neem oil 10,000 ppm applied</p>
+                        <p className="text-[11px] text-slate-500 notranslate" translate="no">
+                          {formatShortDateOffset(-9, false, now)} • Neem oil 10,000 ppm applied
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4 self-end sm:self-auto">
@@ -716,7 +744,9 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
                       </div>
                       <div>
                         <p className="text-xs font-bold text-slate-800">Cotton Acre 3 • Potassium Deficiency</p>
-                        <p className="text-[11px] text-slate-500">Oct 11 • SOP 0-0-50 foliar nutrition</p>
+                        <p className="text-[11px] text-slate-500 notranslate" translate="no">
+                          {formatShortDateOffset(-14, false, now)} • SOP 0-0-50 foliar nutrition
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4 self-end sm:self-auto">
@@ -736,7 +766,9 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
                       </div>
                       <div>
                         <p className="text-xs font-bold text-slate-800">Maize Parcel C • Turcicum Leaf Blight</p>
-                        <p className="text-[11px] text-slate-500">Sep 28 • Mancozeb 75% WP</p>
+                        <p className="text-[11px] text-slate-500 notranslate" translate="no">
+                          {formatShortDateOffset(-21, false, now)} • Mancozeb 75% WP
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4 self-end sm:self-auto">
@@ -789,13 +821,13 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-600 pb-4">
-              Real-time aggregation from 182 IoT pheromone traps &amp; farmer diagnostic uploads across Guntur, Tenali &amp; Vijayawada belts.
+              Real-time aggregation from 182 IoT pheromone traps &amp; farmer diagnostic uploads across {activeDistrict} &amp; nearby belts.
             </p>
 
             {/* Agrarian Radar Map Indicator */}
             <div className="p-4 rounded-xl bg-[#F8FAF7] border border-[#E7EFE7] mb-5">
               <div className="flex items-center justify-between pb-2">
-                <span className="text-xs font-bold text-slate-800">Krishna Delta Corridor</span>
+                <span className="text-xs font-bold text-slate-800">{activeDistrict} Corridor</span>
                 <span className="text-[11px] text-slate-500 font-semibold">Radius: 35 km</span>
               </div>
               <div className="space-y-2.5 pt-1">
@@ -889,7 +921,9 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-base text-[#113E2E]">Dr. M. Venkat Raman, Ph.D.</h3>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-[#113E2E] text-[11px] font-bold">Chief Pathologist • KVK Guntur</span>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-[#113E2E] text-[11px] font-bold">
+                Chief Pathologist • KVK {activeDistrict}
+              </span>
             </div>
             <p className="text-xs text-slate-600 mt-0.5">Specialized in Paddy, Chilli &amp; Cotton pathology. On-duty today until 6:00 PM for video diagnostic calls.</p>
           </div>
@@ -927,7 +961,9 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
               </button>
             </div>
             <div className="space-y-3 text-xs text-slate-600">
-              <p>Connecting you to <strong>Dr. M. Venkat Raman</strong> (KVK Guntur Pathologist).</p>
+              <p>
+                Connecting you to <strong>Dr. M. Venkat Raman</strong> (KVK {activeDistrict} Pathologist).
+              </p>
               <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 tabular-nums">
                 <p className="font-bold text-[#113E2E]">Available Hotline Options:</p>
                 <p className="mt-1">Toll-Free Kisan Call Centre: <strong>1800-180-1551</strong></p>

@@ -68,6 +68,10 @@ export const en = {
   },
   overview: {
     greeting: 'Good morning',
+    greetingMorning: 'Good morning',
+    greetingAfternoon: 'Good afternoon',
+    greetingEvening: 'Good evening',
+    greetingNight: 'Good evening',
     cycloneBannerTitle: 'IMD Red Alert: Bay of Bengal Cyclone Warning',
     cycloneBannerSub: 'Deep Depression approaching Andhra Coast (ETA: 42 Hours). Gale winds 55-65 km/h, 70-95mm rain expected.',
     openMitigation: 'Open Cyclone Defense Protocol',

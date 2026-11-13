@@ -1,11 +1,13 @@
 import React, { memo, useMemo, useState } from 'react';
 import { ActiveTab } from '../../../shared/types';
-import { CROPS_DATA, NOTIFICATIONS_DATA } from '../../../shared/data/mockData';
+import { CROPS_DATA, MANDI_ITEMS, NOTIFICATIONS_DATA } from '../../../shared/data/mockData';
 import { useTranslation } from '../../../shared/i18n';
 import { useAppDispatch, useAppSelector } from '../../../app/store/hooks';
+import { selectCalendarTasks } from '../../../app/store/uiSlice';
 import {
   openAuthModal,
   selectAuthUser,
+  selectCropOptionsUi,
   selectIsAuthenticated,
 } from '../../auth';
 import {
@@ -18,6 +20,14 @@ import {
   openLocationModal,
   selectWeatherUi,
 } from '../../weather';
+import {
+  formatFullDisplayDate,
+  formatLiveClockTime,
+  formatShortDateOffset,
+  getCurrentAgriSeason,
+  getGreetingKey,
+  useLiveNow,
+} from '../../../shared/utils/dateTime';
 import {
   Camera,
   Search,
@@ -517,15 +527,132 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   const dispatch = useAppDispatch();
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const user = useAppSelector(selectAuthUser);
+  const { crops: cropOptions } = useAppSelector(selectCropOptionsUi);
+  const { location, current, forecast, lastFetchedAt, loading } = useAppSelector(selectWeatherUi);
+  const calendarTasks = useAppSelector(selectCalendarTasks);
+  const now = useLiveNow();
+
   const setActiveTab = onNavigateTab || propSetActiveTab || (() => {});
   const onOpenScanModal = onOpenScanCrop || propOnOpenScanModal || (() => {});
   const onOpenAiChat = onOpenDostAi || propOnOpenAiChat || (() => {});
   void onOpenReportOutbreak;
   const [searchQuery, setSearchQuery] = useState('');
 
-  const visibleNotifications = NOTIFICATIONS_DATA.filter(
-    (item) => isAuthenticated || !item.isPersonal
-  ).slice(0, 3);
+  const activeDistrict = useMemo(
+    () => location.district || user?.district || location.label.split(',')[0].trim() || 'Regional',
+    [location.district, location.label, user?.district]
+  );
+
+  const activeSeason = useMemo(() => getCurrentAgriSeason(now), [now]);
+
+  const userCropName = useMemo(() => {
+    if (!isAuthenticated || !user?.cropId) return null;
+    return cropOptions.find((c) => c.id === user.cropId)?.label ?? null;
+  }, [cropOptions, isAuthenticated, user?.cropId]);
+
+  const weatherOverview = useMemo(() => {
+    const todayRain = forecast[0]?.precipitation_sum ?? 0;
+    const next48Rain = forecast.slice(0, 2).reduce((acc, d) => acc + d.precipitation_sum, 0);
+    const maxWindGust = Math.max(
+      current?.wind_gusts_10m ?? 0,
+      forecast[0]?.wind_speed_10m_max ?? 0
+    );
+    const severeWeather =
+      (current && (current.wind_gusts_10m >= 40 || current.wind_speed_10m >= 30)) ||
+      forecast.slice(0, 2).some((d) => d.precipitation_sum >= 35 || d.precipitation_probability_max >= 85);
+
+    const estimatedMoisture = current
+      ? Math.min(
+          88,
+          Math.max(
+            26,
+            Math.round(
+              42 +
+                (current.relative_humidity_2m - 50) * 0.35 +
+                todayRain * 0.9 -
+                Math.max(0, current.temperature_2m - 30) * 0.8
+            )
+          )
+        )
+      : null;
+
+    let moistureBadge = loading ? 'Syncing' : 'Optimal';
+    let moistureBadgeClass = 'text-emerald-800 bg-emerald-100';
+    if (estimatedMoisture !== null) {
+      if (estimatedMoisture >= 72) {
+        moistureBadge = 'High Moisture';
+        moistureBadgeClass = 'text-blue-800 bg-blue-100';
+      } else if (estimatedMoisture <= 38) {
+        moistureBadge = 'Dry Alert';
+        moistureBadgeClass = 'text-amber-800 bg-amber-100';
+      }
+    }
+
+    const wmo = current ? describeWmoCode(current.weather_code, current.is_day) : null;
+
+    return {
+      todayRain,
+      next48Rain: Math.round(next48Rain * 10) / 10,
+      maxWindGust: Math.round(maxWindGust),
+      severeWeather,
+      estimatedMoisture,
+      moistureBadge,
+      moistureBadgeClass,
+      wmo,
+    };
+  }, [current, forecast, loading]);
+
+  const highlightedMandi = useMemo(() => {
+    if (userCropName) {
+      const normalized = userCropName.toLowerCase();
+      const matched = MANDI_ITEMS.find((m) => m.name.toLowerCase().includes(normalized));
+      if (matched) return matched;
+    }
+    return [...MANDI_ITEMS].sort((a, b) => b.changePercent - a.changePercent)[0];
+  }, [userCropName]);
+
+  const pendingTasks = useMemo(
+    () => calendarTasks.filter((task) => !task.isCompleted),
+    [calendarTasks]
+  );
+  const nextTask = pendingTasks[0] ?? calendarTasks[0];
+
+  const visibleCrops = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const list = CROPS_DATA.filter((crop) =>
+      !q
+        ? true
+        : crop.name.toLowerCase().includes(q) ||
+          crop.variety.toLowerCase().includes(q) ||
+          crop.stage.toLowerCase().includes(q)
+    );
+    if (!userCropName) return list;
+    const normalized = userCropName.toLowerCase();
+    return [...list].sort((a, b) => {
+      const aMatch = a.name.toLowerCase().includes(normalized) ? -1 : 0;
+      const bMatch = b.name.toLowerCase().includes(normalized) ? -1 : 0;
+      return aMatch - bMatch;
+    });
+  }, [searchQuery, userCropName]);
+
+  const visibleNotifications = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return NOTIFICATIONS_DATA.filter((item) => {
+      if (!isAuthenticated && item.isPersonal) return false;
+      if (!q) return true;
+      return (
+        item.title.toLowerCase().includes(q) ||
+        (item.description || item.message || '').toLowerCase().includes(q)
+      );
+    }).slice(0, 3);
+  }, [isAuthenticated, searchQuery]);
+
+  const marketSyncLabel = useMemo(() => {
+    if (lastFetchedAt) {
+      return `e-NAM & AGMARKNET Synced: ${formatLiveClockTime(new Date(lastFetchedAt))}`;
+    }
+    return `e-NAM & AGMARKNET Live: ${formatLiveClockTime(now)}`;
+  }, [lastFetchedAt, now]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -533,13 +660,17 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
       <div className="space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
-              Wednesday, 01 October 2026
-            </span>
+            <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+              <span className="notranslate" translate="no">{formatFullDisplayDate(now)}</span>
+              <span>•</span>
+              <span className="text-[#175638]">{activeSeason}</span>
+              <span>•</span>
+              <span>{location.label}</span>
+            </div>
             <h1 className="text-2xl sm:text-3xl font-bold font-serif text-[#14382d] flex items-baseline gap-1.5 mt-0.5">
-              <span>{t('overview.greeting')},</span>
+              <span>{t(getGreetingKey(now))},</span>
               <span key={isAuthenticated ? 'auth-name' : 'guest-name'}>
-                {isAuthenticated && user ? user.name.split(' ')[0] : 'Farmer Hari Garu'}
+                {isAuthenticated && user ? user.name.split(' ')[0] : 'Farmer'}
               </span>
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">{t('nav.askDostAiSub')}</p>
@@ -567,36 +698,80 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </div>
         </div>
 
-        {/* Full-Width Cyclone Warning Alert Banner */}
-        <div className="w-full p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-red-50 via-amber-50 to-orange-50 border-2 border-red-500/40 shadow-xs relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5">
-            <div className="w-11 h-11 rounded-xl bg-red-500 text-white flex items-center justify-center shrink-0 shadow-sm font-bold text-lg">
-              <AlertTriangle className="w-6 h-6 animate-pulse" />
+        {/* Dynamic Live Weather Advisory / Severe Alert Banner */}
+        {weatherOverview.severeWeather ? (
+          <div className="w-full p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-red-50 via-amber-50 to-orange-50 border-2 border-red-500/40 shadow-xs relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-red-500 text-white flex items-center justify-center shrink-0 shadow-sm font-bold text-lg">
+                <AlertTriangle className="w-6 h-6 animate-pulse" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-red-100 text-red-700 border border-red-200 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                    Severe Weather Watch • {location.label}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 tabular-nums">
+                    Gusts up to {weatherOverview.maxWindGust} km/h · {weatherOverview.next48Rain} mm / 48h
+                  </span>
+                </div>
+                <p className="text-xs font-bold text-slate-900 leading-snug">
+                  Elevated wind or rainfall detected in forecast for {location.label}. Review crop drainage and spray pause protocols.
+                </p>
+              </div>
             </div>
-            <div className="space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-red-100 text-red-700 border border-red-200 flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                  🚨 {t('overview.cycloneBannerTitle')}
-                </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                  {t('myCrops.cycloneEta')}
+            <div className="flex items-center gap-3 shrink-0 self-start md:self-center">
+              <button
+                onClick={() => setActiveTab('my-crops')}
+                className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition shadow-sm flex items-center gap-1.5 active:scale-95 cursor-pointer"
+              >
+                <span>{t('overview.openMitigation')} →</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="w-full p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-[#eef7f0] via-[#f7fbf8] to-amber-50/70 border border-[#cbe1d2] shadow-xs relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-[#175638] text-white flex items-center justify-center shrink-0 shadow-sm">
+                <span className="material-symbols-outlined notranslate text-2xl text-[#e5b54f]" translate="no">
+                  {weatherOverview.wmo?.icon || 'partly_cloudy_day'}
                 </span>
               </div>
-              <p className="text-xs font-bold text-slate-900 leading-snug">
-                {t('overview.cycloneBannerSub')}
-              </p>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-100 text-[#113e2e] border border-emerald-200 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    Live Microclimate Briefing • {location.label}
+                  </span>
+                  {current && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white text-[#113e2e] border border-[#cbe1d2] tabular-nums notranslate" translate="no">
+                      {Math.round(current.temperature_2m)}°C · {weatherOverview.wmo?.label} · Wind {current.wind_speed_10m} km/h
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs font-semibold text-slate-800 leading-snug">
+                  {current
+                    ? `Favorable ${activeSeason} field conditions in ${activeDistrict}. Next 48h rainfall outlook: ${weatherOverview.next48Rain} mm.`
+                    : `Syncing live hyperlocal weather conditions for ${location.label}...`}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0 self-start md:self-center">
+              <button
+                onClick={() => setActiveTab('my-crops')}
+                className="bg-white hover:bg-emerald-50 text-[#113e2e] border border-[#cbe1d2] font-bold text-xs px-4 py-2 rounded-xl transition shadow-xs cursor-pointer"
+              >
+                Crop Protection
+              </button>
+              <button
+                onClick={() => setActiveTab('weather')}
+                className="bg-[#175638] hover:bg-[#12452c] text-white font-bold text-xs px-4 py-2 rounded-xl transition shadow-xs cursor-pointer"
+              >
+                Weather Hub →
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-3 shrink-0 self-start md:self-center">
-            <button
-              onClick={() => setActiveTab('my-crops')}
-              className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition shadow-sm flex items-center gap-1.5 active:scale-95"
-            >
-              <span>{t('overview.openMitigation')} →</span>
-            </button>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* 4 Top KPI Cards */}
@@ -610,15 +785,19 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             <div className="w-8 h-8 rounded-xl bg-emerald-50 text-[#175638] flex items-center justify-center">
               <Droplets className="w-4 h-4" />
             </div>
-            <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
-              Live
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${weatherOverview.moistureBadgeClass}`}>
+              {weatherOverview.moistureBadge}
             </span>
           </div>
           <div className="mt-3">
-            <span className="text-xs text-slate-500">Soil moisture</span>
-            <div className="text-2xl font-bold text-slate-900 mt-0.5 tabular-nums">64%</div>
-            <span className="text-[11px] text-slate-400 mt-0.5 block">
-              {isAuthenticated ? 'Optimal for your crops' : 'Optimal across regional soils'}
+            <span className="text-xs text-slate-500">Surface soil moisture</span>
+            <div className="text-2xl font-bold text-slate-900 mt-0.5 tabular-nums notranslate" translate="no">
+              {weatherOverview.estimatedMoisture !== null ? `${weatherOverview.estimatedMoisture}%` : '--%'}
+            </div>
+            <span className="text-[11px] text-slate-400 mt-0.5 block truncate">
+              {current
+                ? `RH ${current.relative_humidity_2m}% · ${activeDistrict}`
+                : `Syncing ${location.label}`}
             </span>
           </div>
         </div>
@@ -635,14 +814,30 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
               <TrendingUp className="w-4 h-4" />
             </div>
-            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-              Bullish
+            <span
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                highlightedMandi.isPositive
+                  ? 'text-emerald-700 bg-emerald-50'
+                  : 'text-amber-800 bg-amber-50'
+              }`}
+            >
+              {highlightedMandi.isPositive ? 'Bullish' : 'Hold Watch'}
             </span>
           </div>
           <div className="mt-3">
             <span className="text-xs text-slate-500">Market outlook</span>
-            <div className="text-2xl font-bold text-emerald-700 mt-0.5">+8.2%</div>
-            <span className="text-[11px] text-slate-400 mt-0.5 block">Rice prices rising</span>
+            <div
+              className={`text-2xl font-bold mt-0.5 tabular-nums notranslate ${
+                highlightedMandi.isPositive ? 'text-emerald-700' : 'text-amber-700'
+              }`}
+              translate="no"
+            >
+              {highlightedMandi.isPositive ? '+' : ''}
+              {highlightedMandi.changePercent}%
+            </div>
+            <span className="text-[11px] text-slate-400 mt-0.5 block truncate">
+              {highlightedMandi.name} ({highlightedMandi.change}/qtl)
+            </span>
           </div>
         </div>
 
@@ -655,14 +850,32 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             <div className="w-8 h-8 rounded-xl bg-emerald-50 text-[#175638] flex items-center justify-center">
               <CalendarCheck className="w-4 h-4" />
             </div>
-            <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
-              Action Due
+            <span
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                pendingTasks.length > 0
+                  ? 'text-amber-800 bg-amber-100'
+                  : 'text-emerald-800 bg-emerald-100'
+              }`}
+            >
+              {pendingTasks.length > 0 ? `${pendingTasks.length} Due` : 'All Done'}
             </span>
           </div>
           <div className="mt-3">
-            <span className="text-xs text-slate-500">Today's task</span>
-            <div className="text-2xl font-bold text-slate-900 mt-0.5">Irrigate</div>
-            <span className="text-[11px] text-slate-400 mt-0.5 block">Basmati rice · 6:00 PM</span>
+            <span className="text-xs text-slate-500">Next farm task</span>
+            <div className="text-xl sm:text-2xl font-bold text-slate-900 mt-0.5 truncate">
+              {nextTask
+                ? nextTask.category === 'fertilizer'
+                  ? 'Top-Dress'
+                  : nextTask.category === 'pest'
+                    ? 'Pest Spray'
+                    : nextTask.category === 'irrigation'
+                      ? 'Irrigate'
+                      : 'Field Task'
+                : 'Completed'}
+            </div>
+            <span className="text-[11px] text-slate-400 mt-0.5 block truncate">
+              {nextTask ? `${nextTask.field.split('(')[0].trim()} · ${nextTask.timing}` : 'Schedule up to date'}
+            </span>
           </div>
         </div>
       </div>
@@ -744,53 +957,59 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {CROPS_DATA.map((crop) => (
-            <div
-              key={crop.id}
-              onClick={() => setActiveTab('my-crops')}
-              className="bg-white rounded-2xl p-4 border border-[#e5ebe7] shadow-xs flex flex-col justify-between hover:border-emerald-300 transition cursor-pointer"
-            >
-              <div>
-                <div className="flex items-start justify-between">
-                  <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-xl shadow-xs">
-                    {crop.icon}
+          {visibleCrops.map((crop) => {
+            const isPrimary =
+              Boolean(userCropName) && crop.name.toLowerCase().includes(userCropName!.toLowerCase());
+            return (
+              <div
+                key={crop.id}
+                onClick={() => setActiveTab('my-crops')}
+                className={`bg-white rounded-2xl p-4 border shadow-xs flex flex-col justify-between hover:border-emerald-300 transition cursor-pointer ${
+                  isPrimary ? 'border-emerald-500 ring-1 ring-emerald-500/20' : 'border-[#e5ebe7]'
+                }`}
+              >
+                <div>
+                  <div className="flex items-start justify-between">
+                    <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-xl shadow-xs">
+                      {crop.icon}
+                    </div>
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                        crop.status === 'healthy'
+                          ? 'bg-[#e1f3e8] text-[#175638]'
+                          : 'bg-amber-50 text-amber-700'
+                      }`}
+                    >
+                      {isPrimary ? 'Primary Crop' : crop.status === 'healthy' ? 'Healthy' : 'Needs attention'}
+                    </span>
                   </div>
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                      crop.status === 'healthy'
-                        ? 'bg-[#e1f3e8] text-[#175638]'
-                        : 'bg-amber-50 text-amber-700'
-                    }`}
-                  >
-                    {crop.status === 'healthy' ? 'Healthy' : 'Needs attention'}
+                  <div className="mt-3">
+                    <h3 className="text-xs font-bold text-slate-900">
+                      {crop.name} <span className="font-normal text-slate-500">({crop.variety})</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-1 tabular-nums">
+                      {crop.stage} • {crop.days} days
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 pt-3 border-t border-gray-100">
+                  <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 mb-1">
+                    <span>{isAuthenticated ? 'Progress' : 'Season progress'}</span>
+                    <span className="font-bold text-slate-800 tabular-nums">{crop.progressPercent}%</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="bg-[#175638] h-full rounded-full transition-all"
+                      style={{ width: `${crop.progressPercent}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-2 block">
+                    {isAuthenticated ? `${crop.field} • ${crop.area}` : `${activeDistrict} Regional Standard`}
                   </span>
                 </div>
-                <div className="mt-3">
-                  <h3 className="text-xs font-bold text-slate-900">
-                    {crop.name} <span className="font-normal text-slate-500">({crop.variety})</span>
-                  </h3>
-                  <p className="text-[11px] text-slate-500 mt-1 tabular-nums">
-                    {crop.stage} • {crop.days} days
-                  </p>
-                </div>
               </div>
-              <div className="mt-4 pt-3 border-t border-gray-100">
-                <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 mb-1">
-                  <span>{isAuthenticated ? 'Progress' : 'Season progress'}</span>
-                  <span className="font-bold text-slate-800 tabular-nums">{crop.progressPercent}%</span>
-                </div>
-                <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className="bg-[#175638] h-full rounded-full transition-all"
-                    style={{ width: `${crop.progressPercent}%` }}
-                  />
-                </div>
-                <span className="text-[10px] text-slate-400 mt-2 block">
-                  {isAuthenticated ? `${crop.field} • ${crop.area}` : 'Coastal Andhra Regional Standard'}
-                </span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 
@@ -807,8 +1026,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 <h3 className="text-xs font-bold text-slate-900">Crop Calendar</h3>
                 <p className="text-[11px] text-slate-500">
                   {isAuthenticated
-                    ? 'Upcoming tasks and schedule for your crops.'
-                    : 'Standard Kharif phenology & seasonal schedule.'}
+                    ? `Upcoming ${activeSeason} tasks (${pendingTasks.length} pending) for your crops.`
+                    : `Standard ${activeSeason} phenology & seasonal schedule.`}
                 </p>
               </div>
             </div>
@@ -954,105 +1173,69 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             </div>
 
             <div className="divide-y divide-gray-50 mt-4">
-              {/* Paddy */}
-              <div className="py-2.5 flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-base">🌾</span>
-                  <div>
-                    <h5 className="text-xs font-semibold text-slate-900">Paddy (Basmati 1509)</h5>
-                    <div className="text-xs font-bold text-slate-800">
-                      ₹ 2,350 <span className="font-normal text-[10px] text-slate-400">/quintal</span>
+              {MANDI_ITEMS.map((item) => {
+                const icon =
+                  item.id === 'mandi-1'
+                    ? '🌶️'
+                    : item.id === 'mandi-2'
+                      ? '🌾'
+                      : item.id === 'mandi-3'
+                        ? '🌽'
+                        : '🥜';
+                return (
+                  <div key={item.id} className="py-2.5 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-base">{icon}</span>
+                      <div>
+                        <h5 className="text-xs font-semibold text-slate-900">{item.name}</h5>
+                        <div className="text-xs font-bold text-slate-800 tabular-nums notranslate" translate="no">
+                          ₹ {item.price.toLocaleString('en-IN')}{' '}
+                          <span className="font-normal text-[10px] text-slate-400">/{item.unit}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <span
+                          className={`text-[11px] font-bold block tabular-nums notranslate ${
+                            item.isPositive ? 'text-emerald-600' : 'text-red-600'
+                          }`}
+                          translate="no"
+                        >
+                          {item.isPositive ? '↑' : '↓'} {Math.abs(item.changePercent)}%
+                        </span>
+                        <span className="text-[9px] text-slate-400">Today</span>
+                      </div>
+                      <svg
+                        className={`w-14 h-6 ${item.isPositive ? 'text-emerald-600' : 'text-red-500'}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 60 20"
+                      >
+                        <path
+                          d={
+                            item.isPositive
+                              ? 'M2,16 L12,14 L24,17 L36,10 L48,11 L58,4'
+                              : 'M2,6 L14,8 L26,10 L38,15 L48,13 L58,18'
+                          }
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                        />
+                        <circle cx="58" cy={item.isPositive ? '4' : '18'} fill="currentColor" r="2" />
+                      </svg>
                     </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
-                    <span className="text-[11px] font-bold text-emerald-600 block">↑ 3.1%</span>
-                    <span className="text-[9px] text-slate-400">7 days</span>
-                  </div>
-                  <svg className="w-14 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 60 20">
-                    <path d="M2,16 L12,14 L24,17 L36,10 L48,11 L58,4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                    <circle cx="58" cy="4" fill="currentColor" r="2" />
-                  </svg>
-                </div>
-              </div>
-
-              {/* Chilli */}
-              <div className="py-2.5 flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-base">🌶️</span>
-                  <div>
-                    <h5 className="text-xs font-semibold text-slate-900">Guntur Sannam Chilli</h5>
-                    <div className="text-xs font-bold text-slate-800">
-                      ₹ 19,850 <span className="font-normal text-[10px] text-slate-400">/quintal</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
-                    <span className="text-[11px] font-bold text-emerald-600 block">↑ 2.1%</span>
-                    <span className="text-[9px] text-slate-400">7 days</span>
-                  </div>
-                  <svg className="w-14 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 60 20">
-                    <path d="M2,18 L14,15 L26,16 L38,9 L48,11 L58,5" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                    <circle cx="58" cy="5" fill="currentColor" r="2" />
-                  </svg>
-                </div>
-              </div>
-
-              {/* Maize */}
-              <div className="py-2.5 flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-base">🌽</span>
-                  <div>
-                    <h5 className="text-xs font-semibold text-slate-900">Hybrid Yellow Maize</h5>
-                    <div className="text-xs font-bold text-slate-800">
-                      ₹ 2,180 <span className="font-normal text-[10px] text-slate-400">/quintal</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
-                    <span className="text-[11px] font-bold text-red-600 block">↓ 1.3%</span>
-                    <span className="text-[9px] text-slate-400">7 days</span>
-                  </div>
-                  <svg className="w-14 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 60 20">
-                    <path d="M2,6 L14,8 L26,10 L38,15 L48,13 L58,18" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                    <circle cx="58" cy="18" fill="currentColor" r="2" />
-                  </svg>
-                </div>
-              </div>
-
-              {/* Groundnut */}
-              <div className="py-2.5 flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-base">🥜</span>
-                  <div>
-                    <h5 className="text-xs font-semibold text-slate-900">Groundnut (Bold Pods)</h5>
-                    <div className="text-xs font-bold text-slate-800">
-                      ₹ 6,750 <span className="font-normal text-[10px] text-slate-400">/quintal</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
-                    <span className="text-[11px] font-bold text-emerald-600 block">↑ 1.6%</span>
-                    <span className="text-[9px] text-slate-400">7 days</span>
-                  </div>
-                  <svg className="w-14 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 60 20">
-                    <path d="M2,17 L12,15 L24,16 L36,11 L48,12 L58,4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                    <circle cx="58" cy="4" fill="currentColor" r="2" />
-                  </svg>
-                </div>
-              </div>
+                );
+              })}
             </div>
           </div>
 
           <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
-            <span className="text-[11px] text-slate-500">e-NAM &amp; AGMARKNET Synced: 08:42 AM</span>
+            <span className="text-[11px] text-slate-500 tabular-nums">{marketSyncLabel}</span>
             <button
               onClick={() => setActiveTab('market-prices')}
-              className="text-xs font-bold text-[#175638] hover:underline"
+              className="text-xs font-bold text-[#175638] hover:underline cursor-pointer"
             >
               Direct Buyer Linkages →
             </button>
@@ -1130,7 +1313,9 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                         </span>
                       </div>
                     </div>
-                    <span className="text-[10px] text-slate-400">Today, 08:42 AM</span>
+                    <span className="text-[10px] text-slate-400 tabular-nums notranslate" translate="no">
+                      Today, {formatLiveClockTime(new Date(now.getTime() - 90 * 60_000))}
+                    </span>
                   </div>
 
                   <div
@@ -1148,7 +1333,9 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                         </span>
                       </div>
                     </div>
-                    <span className="text-[10px] text-slate-400">16 Oct 2026</span>
+                    <span className="text-[10px] text-slate-400 tabular-nums notranslate" translate="no">
+                      {formatShortDateOffset(-5, true, now)}
+                    </span>
                   </div>
 
                   <div
@@ -1166,7 +1353,9 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                         </span>
                       </div>
                     </div>
-                    <span className="text-[10px] text-slate-400">28 Sep 2026</span>
+                    <span className="text-[10px] text-slate-400 tabular-nums notranslate" translate="no">
+                      {formatShortDateOffset(-14, true, now)}
+                    </span>
                   </div>
                 </div>
               </>
@@ -1233,9 +1422,11 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 <span className="text-[10px] text-slate-400">Target Level</span>
               </div>
               <div className="p-3 rounded-xl bg-gray-50/70 border border-gray-100">
-                <span className="text-[11px] font-semibold text-slate-600 block">Water Holding</span>
-                <div className="text-base font-bold text-slate-900 mt-1">68%</div>
-                <span className="text-[10px] text-emerald-700 font-semibold">Optimal</span>
+                <span className="text-[11px] font-semibold text-slate-600 block">Surface Moisture</span>
+                <div className="text-base font-bold text-slate-900 mt-1 tabular-nums notranslate" translate="no">
+                  {weatherOverview.estimatedMoisture !== null ? `${weatherOverview.estimatedMoisture}%` : '--%'}
+                </div>
+                <span className="text-[10px] text-emerald-700 font-semibold">{weatherOverview.moistureBadge}</span>
               </div>
             </div>
           </div>
@@ -1243,7 +1434,10 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           <div className="mt-4 p-3 bg-[#e8f4ec] rounded-xl flex items-center gap-2.5 text-xs text-[#175638]">
             <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
             <span>
-              <strong>Soil health is improving!</strong> 12% increase in organic matter compared to last month.
+              <strong>{activeDistrict} Soil Advisory:</strong>{' '}
+              {current
+                ? `Current ${current.relative_humidity_2m}% humidity at ${Math.round(current.temperature_2m)}°C supports balanced root uptake.`
+                : '12% increase in organic matter compared to last month.'}
             </span>
           </div>
         </div>

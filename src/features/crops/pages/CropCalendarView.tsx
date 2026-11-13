@@ -1,9 +1,12 @@
-import React, { memo } from 'react';
-import { ActiveTab, CalendarTask } from '../../../shared/types';
-import { CALENDAR_TASKS } from '../../../shared/data/mockData';
+import React, { memo, useMemo, useState } from 'react';
+import { ActiveTab } from '../../../shared/types';
 import { useTranslation } from '../../../shared/i18n';
 import { useAppDispatch, useAppSelector } from '../../../app/store/hooks';
-import { setActiveTab as setActiveTabAction } from '../../../app/store/uiSlice';
+import {
+  selectCalendarTasks,
+  setActiveTab as setActiveTabAction,
+  toggleCalendarTask,
+} from '../../../app/store/uiSlice';
 import {
   openAuthModal,
   selectAuthUser,
@@ -15,6 +18,18 @@ import {
   openLocationModal,
   selectWeatherUi,
 } from '../../weather';
+import {
+  formatDateRangeOffset,
+  formatLiveClockTime,
+  formatRelativeSyncTime,
+  formatShortDateOffset,
+  formatWeekdayShortDateOffset,
+  getCurrentAgriSeason,
+  getMonthYearAndWeekLabel,
+  getWeekStripDays,
+  toIsoDateKey,
+  useLiveNow,
+} from '../../../shared/utils/dateTime';
 import {
   Calendar as CalendarIcon,
   Download,
@@ -166,29 +181,36 @@ export const CropCalendarView: React.FC<CropCalendarViewProps> = ({
   const dispatch = useAppDispatch();
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const user = useAppSelector(selectAuthUser);
+  const { location, current, lastFetchedAt } = useAppSelector(selectWeatherUi);
+  const tasks = useAppSelector(selectCalendarTasks);
+  const now = useLiveNow();
+
   const setActiveTab =
     onNavigateTab || propSetActiveTab || ((tab: ActiveTab) => dispatch(setActiveTabAction(tab)));
   const onOpenAiChat = onOpenDostAi || propOnOpenAiChat || (() => {});
-  const [tasks, setTasks] = React.useState<CalendarTask[]>(CALENDAR_TASKS);
-  const [selectedDay, setSelectedDay] = React.useState<string>('01');
-  const [recommendationApplied, setRecommendationApplied] = React.useState(false);
-  const [actionNotice, setActionNotice] = React.useState<string | null>(null);
+
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedIsoDate, setSelectedIsoDate] = useState<string>(() => toIsoDateKey(new Date()));
+  const [recommendationApplied, setRecommendationApplied] = useState(false);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+
+  const activeDistrict = useMemo(
+    () => location.district || user?.district || location.label.split(',')[0].trim() || 'Regional',
+    [location.district, location.label, user?.district]
+  );
+
+  const activeSeason = useMemo(() => getCurrentAgriSeason(now), [now]);
+  const weekHeading = useMemo(() => getMonthYearAndWeekLabel(weekOffset, now), [weekOffset, now]);
+  const weekDays = useMemo(() => getWeekStripDays(weekOffset, undefined, now), [weekOffset, now]);
+
+  const estimatedVwc = useMemo(() => {
+    if (!current) return 68;
+    return Math.min(86, Math.max(32, Math.round(45 + (current.relative_humidity_2m - 45) * 0.45)));
+  }, [current]);
 
   const toggleTaskCompletion = (id: string) => {
-    setTasks((prev) =>
-      prev.map((task) => (task.id === id ? { ...task, isCompleted: !task.isCompleted } : task))
-    );
+    dispatch(toggleCalendarTask(id));
   };
-
-  const weekDays = [
-    { dayName: 'Mon', dateNum: '28', hasTask: false },
-    { dayName: 'Tue', dateNum: '29', hasTask: true },
-    { dayName: 'Wed', dateNum: '30', hasTask: false },
-    { dayName: 'Thu', dateNum: '01', hasTask: true, isToday: true },
-    { dayName: 'Fri', dateNum: '02', hasTask: true },
-    { dayName: 'Sat', dateNum: '03', hasTask: true },
-    { dayName: 'Sun', dateNum: '04', hasTask: false },
-  ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -203,10 +225,10 @@ export const CropCalendarView: React.FC<CropCalendarViewProps> = ({
         </div>
         <div className="flex items-center gap-2 text-xs text-slate-500 tabular-nums">
           <span className="bg-white px-2.5 py-1 rounded-full border border-slate-200 font-medium text-slate-700">
-            {isAuthenticated && user ? 'IoT Sensors: 8 Online' : 'Coastal Andhra Crop Grid'}
+            {isAuthenticated && user ? 'IoT Sensors: 8 Online' : `${activeDistrict} Crop Grid`}
           </span>
           <span className="text-slate-400">·</span>
-          <span>Telemetry Refreshed 12m ago</span>
+          <span>{formatRelativeSyncTime(lastFetchedAt, now)}</span>
         </div>
       </div>
 
@@ -238,7 +260,7 @@ export const CropCalendarView: React.FC<CropCalendarViewProps> = ({
               {t('calendar.title')}
             </h1>
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-bold border border-amber-200">
-              {isAuthenticated && user ? `Kharif 2026 · ${user.location}` : 'Kharif 2026 · Coastal Andhra Zone'}
+              {activeSeason} · {isAuthenticated && user ? user.location : location.label}
             </span>
           </div>
           <p className="text-sm text-slate-600 leading-relaxed">
@@ -249,16 +271,16 @@ export const CropCalendarView: React.FC<CropCalendarViewProps> = ({
         <div className="flex flex-wrap items-center gap-2.5 pt-1 lg:pt-0">
           <button
             onClick={onOpenCustomTaskModal}
-            className="h-10 px-4 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-[#113e2e] text-xs font-bold flex items-center gap-2 transition shadow-xs"
+            className="h-10 px-4 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-[#113e2e] text-xs font-bold flex items-center gap-2 transition shadow-xs cursor-pointer"
           >
             <Plus className="w-4 h-4 text-emerald-700" />
             <span>{t('calendar.addTask')}</span>
           </button>
           <button
             onClick={() =>
-              setActionNotice('Preparing official Kharif 2026 agronomic crop calendar (PDF) download.')
+              setActionNotice(`Preparing official ${activeSeason} agronomic crop calendar (PDF) download.`)
             }
-            className="h-10 px-4 rounded-xl bg-[#113e2e] hover:bg-[#0c2a1f] text-white text-xs font-bold flex items-center gap-2 transition shadow-xs"
+            className="h-10 px-4 rounded-xl bg-[#113e2e] hover:bg-[#0c2a1f] text-white text-xs font-bold flex items-center gap-2 transition shadow-xs cursor-pointer"
           >
             <Download className="w-4 h-4" />
             <span>{t('common.download')} (PDF)</span>
@@ -278,24 +300,24 @@ export const CropCalendarView: React.FC<CropCalendarViewProps> = ({
             </span>
             <span className="text-xs text-slate-800 font-medium">
               {isAuthenticated && user
-                ? 'Sentinel-2 Satellite Telemetry Synced Today (10:15 AM) · Optimal moisture window for Field 1 fertigation.'
-                : 'Sentinel-2 Satellite Telemetry Synced Today (10:15 AM) · Optimal moisture window for Kharif paddy fertigation.'}
+                ? `Weather & Soil Telemetry Synced (${formatLiveClockTime(now)}) · Optimal moisture window for Field 1 fertigation.`
+                : `Weather & Soil Telemetry Synced (${formatLiveClockTime(now)}) · Optimal moisture window for ${activeSeason} paddy fertigation.`}
             </span>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-          <span className="text-xs font-bold px-3 py-1 rounded-full bg-white text-[#113e2e] border border-[#bcd3c3] tabular-nums">
-            Zone A: 78% VWC
+          <span className="text-xs font-bold px-3 py-1 rounded-full bg-white text-[#113e2e] border border-[#bcd3c3] tabular-nums notranslate" translate="no">
+            Zone A: {estimatedVwc}% VWC
           </span>
         </div>
       </div>
 
-      {/* Active Kharif Parcels & Phenology Cards */}
+      {/* Active Parcels & Phenology Cards */}
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-serif text-lg font-bold text-[#113e2e]">
             {isAuthenticated && user
-              ? 'Active Kharif Parcels & Phenology'
+              ? `Active ${activeSeason.split(' ')[0]} Parcels & Phenology`
               : 'Regional Crop Phenology Benchmarks'}
           </h2>
           {isAuthenticated && user ? (
@@ -357,7 +379,9 @@ export const CropCalendarView: React.FC<CropCalendarViewProps> = ({
             </div>
 
             <div className="pt-4 mt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-              <span className="text-slate-400">Harvest: Dec 15 - 28</span>
+              <span className="text-slate-400 tabular-nums notranslate" translate="no">
+                Harvest: {formatDateRangeOffset(32, 45, now)}
+              </span>
               <button
                 onClick={() => setActiveTab('weather')}
                 className="font-bold text-[#113e2e] hover:underline"
@@ -403,13 +427,15 @@ export const CropCalendarView: React.FC<CropCalendarViewProps> = ({
                   NEXT CRITICAL TASK
                 </span>
                 <p className="font-semibold leading-snug">
-                  Preventive Neem Oil Spray for Thrips (Tomorrow)
+                  Preventive Neem Oil Spray for Thrips (Tomorrow, {formatShortDateOffset(1, false, now)})
                 </p>
               </div>
             </div>
 
             <div className="pt-4 mt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-              <span className="text-slate-400">Harvest: Nov 25 - Dec 10</span>
+              <span className="text-slate-400 tabular-nums notranslate" translate="no">
+                Harvest: {formatDateRangeOffset(14, 28, now)}
+              </span>
               <button
                 onClick={() => setActiveTab('diseases-library')}
                 className="font-bold text-[#113e2e] hover:underline"
@@ -455,13 +481,15 @@ export const CropCalendarView: React.FC<CropCalendarViewProps> = ({
                   NEXT CRITICAL TASK
                 </span>
                 <p className="font-semibold leading-snug">
-                  Sub-surface Drip Irrigation 2.5 Hrs (Saturday)
+                  Sub-surface Drip Irrigation 2.5 Hrs ({formatWeekdayShortDateOffset(2, now)})
                 </p>
               </div>
             </div>
 
             <div className="pt-4 mt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-              <span className="text-slate-400">Harvest: Nov 12 - 20</span>
+              <span className="text-slate-400 tabular-nums notranslate" translate="no">
+                Harvest: {formatDateRangeOffset(5, 13, now)}
+              </span>
               <button
                 onClick={() => setActiveTab('weather')}
                 className="font-bold text-[#113e2e] hover:underline"
@@ -481,7 +509,9 @@ export const CropCalendarView: React.FC<CropCalendarViewProps> = ({
               <CalendarIcon className="w-5 h-5 text-emerald-800" />
             </div>
             <div>
-              <h2 className="font-serif text-lg font-bold text-[#113e2e]">October 2026 • Week 41</h2>
+              <h2 className="font-serif text-lg font-bold text-[#113e2e] notranslate" translate="no">
+                {weekHeading.label}
+              </h2>
               <p className="text-xs text-slate-500">
                 Recommended agronomic sequence based on satellite VCI and local mandi arrivals
               </p>
@@ -489,11 +519,30 @@ export const CropCalendarView: React.FC<CropCalendarViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2 bg-[#f4faf2] p-1.5 rounded-2xl border border-[#dbead9]">
-            <button className="w-8 h-8 rounded-xl bg-white hover:bg-[#edf6ea] border border-[#d6e7d4] flex items-center justify-center text-[#2b5333] transition">
+            <button
+              type="button"
+              onClick={() => setWeekOffset((w) => w - 1)}
+              aria-label="Previous week"
+              className="w-8 h-8 rounded-xl bg-white hover:bg-[#edf6ea] border border-[#d6e7d4] flex items-center justify-center text-[#2b5333] transition cursor-pointer"
+            >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="text-xs font-bold text-[#1a4b26] px-3">Current Week</span>
-            <button className="w-8 h-8 rounded-xl bg-white hover:bg-[#edf6ea] border border-[#d6e7d4] flex items-center justify-center text-[#2b5333] transition">
+            <button
+              type="button"
+              onClick={() => {
+                setWeekOffset(0);
+                setSelectedIsoDate(toIsoDateKey(now));
+              }}
+              className="text-xs font-bold text-[#1a4b26] px-3 hover:underline cursor-pointer"
+            >
+              {weekOffset === 0 ? 'Current Week' : weekOffset > 0 ? `+${weekOffset}w` : `${weekOffset}w`}
+            </button>
+            <button
+              type="button"
+              onClick={() => setWeekOffset((w) => w + 1)}
+              aria-label="Next week"
+              className="w-8 h-8 rounded-xl bg-white hover:bg-[#edf6ea] border border-[#d6e7d4] flex items-center justify-center text-[#2b5333] transition cursor-pointer"
+            >
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -502,11 +551,12 @@ export const CropCalendarView: React.FC<CropCalendarViewProps> = ({
         {/* 7 Day Tabs */}
         <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5">
           {weekDays.map((day) => {
-            const isSelected = selectedDay === day.dateNum;
+            const isSelected = selectedIsoDate === day.isoDate;
             return (
               <button
-                key={day.dateNum}
-                onClick={() => setSelectedDay(day.dateNum)}
+                key={day.isoDate}
+                type="button"
+                onClick={() => setSelectedIsoDate(day.isoDate)}
                 className={`p-3 rounded-2xl text-center transition cursor-pointer border ${
                   day.isToday
                     ? 'bg-[#113e2e] text-white shadow-md ring-2 ring-emerald-300'
@@ -521,7 +571,7 @@ export const CropCalendarView: React.FC<CropCalendarViewProps> = ({
                   </span>
                   {day.isToday && <span className="w-1.5 h-1.5 rounded-full bg-[#fde047]"></span>}
                 </div>
-                <span className={`text-base font-extrabold block mt-0.5 ${day.isToday ? 'text-white' : 'text-slate-800'}`}>
+                <span className={`text-base font-extrabold block mt-0.5 tabular-nums notranslate ${day.isToday ? 'text-white' : 'text-slate-800'}`} translate="no">
                   {day.dateNum}
                 </span>
                 {day.isToday ? (
@@ -529,11 +579,10 @@ export const CropCalendarView: React.FC<CropCalendarViewProps> = ({
                     Today
                   </span>
                 ) : (
-                  <span
-                    className={`inline-block mt-1 w-1.5 h-1.5 rounded-full ${
-                      day.hasTask ? 'bg-emerald-500' : 'bg-transparent'
-                    }`}
-                  />
+                  <div className="flex items-center justify-center gap-1 mt-1">
+                    <span className="text-[9px] text-slate-400 font-semibold">{day.monthShort}</span>
+                    {day.hasTask && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
+                  </div>
                 )}
               </button>
             );
@@ -598,7 +647,7 @@ export const CropCalendarView: React.FC<CropCalendarViewProps> = ({
                   {task.guideButtonText && (
                     <button
                       onClick={() =>
-                        setActionNotice(`Loaded ${task.guideButtonText}: ANGRAU Kharif dosage & application SOP.`)
+                        setActionNotice(`Loaded ${task.guideButtonText}: ANGRAU ${activeSeason.split(' ')[0]} dosage & application SOP.`)
                       }
                       className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition"
                     >
@@ -647,7 +696,7 @@ export const CropCalendarView: React.FC<CropCalendarViewProps> = ({
                 </>
               ) : (
                 <>
-                  Based on Coastal Andhra soil profiles, splitting DAP into two intervals improves nutrient efficiency by <strong className="text-[#fde047]">28%</strong>.
+                  Based on {activeDistrict} soil profiles, splitting DAP into two intervals improves nutrient efficiency by <strong className="text-[#fde047]">28%</strong>.
                 </>
               )}
             </p>
@@ -698,7 +747,7 @@ export const CropCalendarView: React.FC<CropCalendarViewProps> = ({
           <div>
             <h4 className="font-serif font-bold text-sm text-[#113e2e]">Need help interpreting this schedule?</h4>
             <p className="text-xs text-slate-500">
-              Speak directly to Dr. Radhakrishnan (Krishi Vigyan Kendra, Guntur) regarding dosage adjustments.
+              Speak directly to Dr. Radhakrishnan (Krishi Vigyan Kendra, {activeDistrict}) regarding dosage adjustments.
             </p>
           </div>
         </div>

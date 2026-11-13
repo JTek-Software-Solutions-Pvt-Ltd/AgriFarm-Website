@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActiveTab } from '../../../shared/types';
 import { MANDI_ITEMS, NEARBY_ARBITRAGE, CORPORATE_TENDERS } from '../../../shared/data/mockData';
 import { useTranslation } from '../../../shared/i18n';
@@ -10,6 +10,8 @@ import {
   selectAuthUser,
   selectIsAuthenticated,
 } from '../../auth';
+import { selectWeatherUi } from '../../weather';
+import { formatLiveClockTime, formatShortDateOffset, useLiveNow } from '../../../shared/utils/dateTime';
 import {
   Download,
   BellRing,
@@ -43,14 +45,39 @@ export const MarketPricesView: React.FC<MarketPricesViewProps> = ({
   const dispatch = useAppDispatch();
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const user = useAppSelector(selectAuthUser);
+  const { location } = useAppSelector(selectWeatherUi);
+  const now = useLiveNow();
+
   const triggerAi = onOpenDostAi || onOpenAiChat || (() => {});
   const navigate = setActiveTab || onNavigateTab || ((tab: ActiveTab) => dispatch(setActiveTabAction(tab)));
-  const [selectedMandi, setSelectedMandi] = useState('Guntur Mandi Yard');
+
+  const activeDistrict = useMemo(
+    () => location.district || user?.district || location.label.split(',')[0].trim() || 'Guntur',
+    [location.district, location.label, user?.district]
+  );
+
+  const mandiOptions = useMemo(() => {
+    const base = [
+      `${activeDistrict} Mandi Yard`,
+      'Duggirala Turmeric Yard',
+      'Tenali Market Yard',
+      'Vijayawada Wholesale Hub',
+      'Khammam Grain Mandi',
+    ];
+    return Array.from(new Set(base));
+  }, [activeDistrict]);
+
+  const [selectedMandi, setSelectedMandi] = useState(() => `${activeDistrict} Mandi Yard`);
   const [selectedCrop, setSelectedCrop] = useState('Paddy Basmati 1509');
+  const [selectedWindow, setSelectedWindow] = useState('Live Today');
   const [chartMode, setChartMode] = useState<'both' | 'past' | 'forecast'>('both');
   const [subscribedPhone, setSubscribedPhone] = useState(user?.phone || '');
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedMandi(`${activeDistrict} Mandi Yard`);
+  }, [activeDistrict]);
 
   useEffect(() => {
     if (isAuthenticated && user?.phone) {
@@ -60,6 +87,43 @@ export const MarketPricesView: React.FC<MarketPricesViewProps> = ({
       setIsSubscribed(false);
     }
   }, [isAuthenticated, user?.phone]);
+
+  const activeMandiItem = useMemo(() => {
+    const query = selectedCrop.toLowerCase();
+    return (
+      MANDI_ITEMS.find(
+        (m) =>
+          m.name.toLowerCase().includes(query) ||
+          (query.includes('chilli') && m.id === 'mandi-1') ||
+          (query.includes('paddy') && m.id === 'mandi-2') ||
+          (query.includes('maize') && m.id === 'mandi-3') ||
+          (query.includes('groundnut') && m.id === 'mandi-4')
+      ) || MANDI_ITEMS[1]
+    );
+  }, [selectedCrop]);
+
+  const chartMetrics = useMemo(() => {
+    const livePrice = activeMandiItem.price;
+    const peakPrice = Math.round(livePrice * (activeMandiItem.isPositive ? 1.05 : 1.03));
+    const step = Math.round(livePrice * 0.045);
+    const yTicks = [
+      peakPrice + Math.round(step * 0.4),
+      livePrice + Math.round(step * 0.7),
+      livePrice - Math.round(step * 0.4),
+      livePrice - Math.round(step * 1.4),
+    ];
+    const xDates = [
+      formatShortDateOffset(-27, false, now),
+      formatShortDateOffset(-18, false, now),
+      formatShortDateOffset(-9, false, now),
+      `${formatShortDateOffset(0, false, now)} (Live)`,
+      `${formatShortDateOffset(6, false, now)} (Peak)`,
+      formatShortDateOffset(14, false, now),
+    ];
+    const gainLow = Math.max(40, Math.round(livePrice * 0.038));
+    const gainHigh = Math.max(80, Math.round(livePrice * 0.052));
+    return { livePrice, peakPrice, yTicks, xDates, gainLow, gainHigh };
+  }, [activeMandiItem, now]);
 
   const handleSubscribe = (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,7 +148,9 @@ export const MarketPricesView: React.FC<MarketPricesViewProps> = ({
 
         <div className="inline-flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-white border border-[#d5e7db] text-xs font-semibold shadow-xs">
           <span className="w-2 h-2 rounded-full bg-emerald-600 animate-ping"></span>
-          <span className="text-[#113e2e]">AGMARKNET &amp; e-NAM SYNCED: 08:42 AM IST</span>
+          <span className="text-[#113e2e] tabular-nums notranslate" translate="no">
+            AGMARKNET &amp; e-NAM SYNCED: {formatLiveClockTime(now)} IST
+          </span>
           <span className="w-1 h-1 rounded-full bg-slate-300"></span>
           <span className="text-slate-600">4,120 Mandis Monitored</span>
         </div>
@@ -157,11 +223,11 @@ export const MarketPricesView: React.FC<MarketPricesViewProps> = ({
                   onChange={(e) => setSelectedMandi(e.target.value)}
                   className="bg-transparent text-xs font-semibold text-[#113e2e] outline-none cursor-pointer pr-1"
                 >
-                  <option>Guntur Mandi Yard</option>
-                  <option>Duggirala Turmeric Yard</option>
-                  <option>Tenali Market Yard</option>
-                  <option>Vijayawada Wholesale Hub</option>
-                  <option>Khammam Grain Mandi</option>
+                  {mandiOptions.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -180,7 +246,6 @@ export const MarketPricesView: React.FC<MarketPricesViewProps> = ({
                   <option>Chilli Teja (Guntur Grade)</option>
                   <option>Hybrid Yellow Maize</option>
                   <option>Groundnut (Bold Pods)</option>
-                  <option>Cotton (Long Staple)</option>
                 </select>
               </div>
             </div>
@@ -190,7 +255,11 @@ export const MarketPricesView: React.FC<MarketPricesViewProps> = ({
               <Calendar className="w-4 h-4 text-[#113e2e]" />
               <div className="flex flex-col text-left">
                 <span className="text-[9px] uppercase tracking-wider font-bold text-slate-400 leading-tight">Window</span>
-                <select className="bg-transparent text-xs font-semibold text-[#113e2e] outline-none cursor-pointer pr-1">
+                <select
+                  value={selectedWindow}
+                  onChange={(e) => setSelectedWindow(e.target.value)}
+                  className="bg-transparent text-xs font-semibold text-[#113e2e] outline-none cursor-pointer pr-1"
+                >
                   <option>Live Today</option>
                   <option>Past 7 Days</option>
                   <option>Past 30 Days</option>
@@ -203,13 +272,19 @@ export const MarketPricesView: React.FC<MarketPricesViewProps> = ({
           <div className="flex items-center gap-3 bg-white px-3.5 py-1.5 rounded-xl border border-[#d6e5d8] shadow-xs shrink-0">
             <div className="text-left">
               <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider leading-tight">Arrivals</span>
-              <span className="text-xs font-bold text-[#113e2e]">38,450 Qtl</span>
+              <span className="text-xs font-bold text-[#113e2e] tabular-nums">{activeMandiItem.dailyArrival}</span>
             </div>
             <div className="w-px h-6 bg-[#dce7de]"></div>
             <div className="text-left">
               <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider leading-tight">Sentiment</span>
-              <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
-                <TrendingUp className="w-3.5 h-3.5" /> Bullish (+3.4%)
+              <span
+                className={`inline-flex items-center gap-1 text-xs font-bold tabular-nums ${
+                  activeMandiItem.isPositive ? 'text-emerald-700' : 'text-amber-700'
+                }`}
+              >
+                <TrendingUp className="w-3.5 h-3.5" />{' '}
+                {activeMandiItem.isPositive ? 'Bullish' : 'Hold'} ({activeMandiItem.changePercent > 0 ? '+' : ''}
+                {activeMandiItem.changePercent}%)
               </span>
             </div>
           </div>
@@ -218,14 +293,17 @@ export const MarketPricesView: React.FC<MarketPricesViewProps> = ({
 
       {/* 4 Commodity Price Tickers */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-        {MANDI_ITEMS.map((item) => (
-          <div
-            key={item.id}
-            className={`bg-white rounded-2xl p-5 border shadow-xs hover:shadow-md transition-shadow relative overflow-hidden flex flex-col justify-between ${
-              item.id === 'mandi-2' ? 'border-2 border-emerald-500/70' : 'border-[#d6e5d8]'
-            }`}
-          >
-            {item.id === 'mandi-2' && <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-600"></div>}
+        {MANDI_ITEMS.map((item) => {
+          const isSelectedCard = item.id === activeMandiItem.id;
+          return (
+            <div
+              key={item.id}
+              onClick={() => setSelectedCrop(item.name)}
+              className={`bg-white rounded-2xl p-5 border shadow-xs hover:shadow-md transition-all relative overflow-hidden flex flex-col justify-between cursor-pointer ${
+                isSelectedCard ? 'border-2 border-emerald-500/80 ring-1 ring-emerald-500/20' : 'border-[#d6e5d8]'
+              }`}
+            >
+              {isSelectedCard && <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-600"></div>}
             <div>
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -274,17 +352,18 @@ export const MarketPricesView: React.FC<MarketPricesViewProps> = ({
             </div>
 
             <div className="mt-5 pt-3 bg-[#f9fbf9] rounded-xl p-3 border border-[#e4ede5] flex justify-between items-center text-slate-600 text-xs">
-              <div>
-                <span className="block text-[11px] text-slate-500 font-medium">Daily Arrival</span>
-                <span className="font-bold text-slate-800 text-sm">{item.dailyArrival}</span>
-              </div>
-              <div className="text-right">
-                <span className="block text-[11px] text-slate-500 font-medium">Modal Price</span>
-                <span className="font-bold text-[#113e2e] text-sm">₹{item.modalPrice.toLocaleString()}</span>
+                <div>
+                  <span className="block text-[11px] text-slate-500 font-medium">Daily Arrival</span>
+                  <span className="font-bold text-slate-800 text-sm">{item.dailyArrival}</span>
+                </div>
+                <div className="text-right">
+                  <span className="block text-[11px] text-slate-500 font-medium">Modal Price</span>
+                  <span className="font-bold text-[#113e2e] text-sm tabular-nums">₹{item.modalPrice.toLocaleString('en-IN')}</span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Interactive AI Forecasting & Historical Trend Bento */}
@@ -295,14 +374,14 @@ export const MarketPricesView: React.FC<MarketPricesViewProps> = ({
             <div>
               <div className="flex items-center gap-2.5">
                 <h2 className="font-serif font-bold text-lg text-[#113e2e]">
-                  Paddy Basmati 1509: 30D Trend vs 15D AI Forecast
+                  {activeMandiItem.name}: {selectedWindow} vs 15D AI Forecast
                 </h2>
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold text-xs">
                   94.2% Accuracy
                 </span>
               </div>
               <p className="text-xs text-slate-600 mt-1">
-                Multi-market aggregated modal prices across Krishna-Godavari Basin Mandis
+                Live modal rates anchored around {selectedMandi} ({activeDistrict} belt)
               </p>
             </div>
 
@@ -361,10 +440,18 @@ export const MarketPricesView: React.FC<MarketPricesViewProps> = ({
               <line stroke="#e2ece3" strokeDasharray="4 4" strokeWidth="1" x1="40" x2="740" y1="195" y2="195" />
 
               {/* Y-Axis Labels */}
-              <text className="fill-[#404942] font-sans text-[11px] font-semibold" x="5" y="34">₹3,900</text>
-              <text className="fill-[#404942] font-sans text-[11px] font-semibold" x="5" y="89">₹3,750</text>
-              <text className="fill-[#404942] font-sans text-[11px] font-semibold" x="5" y="144">₹3,600</text>
-              <text className="fill-[#404942] font-sans text-[11px] font-semibold" x="5" y="199">₹3,450</text>
+              <text className="fill-[#404942] font-sans text-[11px] font-semibold" x="2" y="34">
+                ₹{chartMetrics.yTicks[0].toLocaleString('en-IN')}
+              </text>
+              <text className="fill-[#404942] font-sans text-[11px] font-semibold" x="2" y="89">
+                ₹{chartMetrics.yTicks[1].toLocaleString('en-IN')}
+              </text>
+              <text className="fill-[#404942] font-sans text-[11px] font-semibold" x="2" y="144">
+                ₹{chartMetrics.yTicks[2].toLocaleString('en-IN')}
+              </text>
+              <text className="fill-[#404942] font-sans text-[11px] font-semibold" x="2" y="199">
+                ₹{chartMetrics.yTicks[3].toLocaleString('en-IN')}
+              </text>
 
               {/* Historical Area & Line */}
               {(chartMode === 'both' || chartMode === 'past') && (
@@ -403,9 +490,9 @@ export const MarketPricesView: React.FC<MarketPricesViewProps> = ({
                   <g>
                     <circle cx="650" cy="48" fill="#f6c343" r="6" stroke="#df9b12" strokeWidth="2" />
                     <circle className="animate-pulse" cx="650" cy="48" fill="#f6c343" opacity="0.35" r="14" />
-                    <rect fill="#113e2e" height="26" rx="6" width="155" x="572" y="8" />
+                    <rect fill="#113e2e" height="26" rx="6" width="165" x="568" y="8" />
                     <text className="fill-[#ffffff] font-sans text-[10px] font-bold" textAnchor="middle" x="650" y="24">
-                      PROJECTED PEAK: ₹3,860
+                      PROJECTED PEAK: ₹{chartMetrics.peakPrice.toLocaleString('en-IN')}
                     </text>
                   </g>
                 </>
@@ -414,16 +501,16 @@ export const MarketPricesView: React.FC<MarketPricesViewProps> = ({
               {/* Today Marker Line */}
               <line stroke="#113e2e" strokeDasharray="2 3" strokeWidth="1.5" x1="470" x2="470" y1="15" y2="230" />
               <text className="fill-[#113e2e] font-sans text-[10px] font-extrabold uppercase" x="475" y="222">
-                TODAY (₹3,680)
+                TODAY (₹{chartMetrics.livePrice.toLocaleString('en-IN')})
               </text>
 
               {/* X-Axis Dates */}
-              <text className="fill-[#707972] font-sans text-[10px]" x="40" y="248">Sep 15</text>
-              <text className="fill-[#707972] font-sans text-[10px]" x="180" y="248">Sep 25</text>
-              <text className="fill-[#707972] font-sans text-[10px]" x="320" y="248">Oct 05</text>
-              <text className="fill-[#113e2e] font-sans text-[10px] font-bold" x="470" y="248">Oct 12 (Live)</text>
-              <text className="fill-[#df9b12] font-sans text-[10px] font-bold" x="610" y="248">Oct 18 (Diwali Peak)</text>
-              <text className="fill-[#707972] font-sans text-[10px]" x="710" y="248">Oct 26</text>
+              <text className="fill-[#707972] font-sans text-[10px]" x="40" y="248">{chartMetrics.xDates[0]}</text>
+              <text className="fill-[#707972] font-sans text-[10px]" x="180" y="248">{chartMetrics.xDates[1]}</text>
+              <text className="fill-[#707972] font-sans text-[10px]" x="320" y="248">{chartMetrics.xDates[2]}</text>
+              <text className="fill-[#113e2e] font-sans text-[10px] font-bold" x="450" y="248">{chartMetrics.xDates[3]}</text>
+              <text className="fill-[#df9b12] font-sans text-[10px] font-bold" x="600" y="248">{chartMetrics.xDates[4]}</text>
+              <text className="fill-[#707972] font-sans text-[10px]" x="705" y="248">{chartMetrics.xDates[5]}</text>
             </svg>
           </div>
 
@@ -438,7 +525,7 @@ export const MarketPricesView: React.FC<MarketPricesViewProps> = ({
                 <span className="text-xs font-semibold text-[#df9b12]">Dost AI ML Projection</span>
               </div>
             </div>
-            <span className="text-xs text-slate-500">Factors: Deepavali festival demand spike + Export quota release</span>
+            <span className="text-xs text-slate-500">Factors: Regional mill demand + Export quota pulse</span>
           </div>
         </div>
 
@@ -459,29 +546,33 @@ export const MarketPricesView: React.FC<MarketPricesViewProps> = ({
 
             <div>
               <span className="bg-[#113e2e] text-white px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider inline-block">
-                HOLD BASMATI PADDY
+                {activeMandiItem.isPositive ? `HOLD ${activeMandiItem.name.toUpperCase()}` : `STORE ${activeMandiItem.name.toUpperCase()}`}
               </span>
               <h3 className="font-serif font-bold text-xl text-[#113e2e] mt-2">Optimum Selling Window</h3>
               <p className="text-xs text-emerald-800 font-medium mt-0.5">
-                Next 10 to 14 days (Prior to Deepavali surge peak)
+                Next 10 to 14 days at {selectedMandi}
               </p>
             </div>
 
             <div className="p-3.5 rounded-2xl bg-white/90 border border-[#bfe3cc] shadow-xs space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-slate-600 font-medium">Projected Gain</span>
-                <span className="text-base font-bold font-serif text-[#113e2e]">+₹140 - ₹180 / Qtl</span>
+                <span className="text-base font-bold font-serif text-[#113e2e] tabular-nums">
+                  +₹{chartMetrics.gainLow} - ₹{chartMetrics.gainHigh} / Qtl
+                </span>
               </div>
               <div className="flex items-center justify-between text-xs pt-1.5 border-t border-[#e2f1e6]">
-                <span className="text-slate-500">On 120 Qtl stock:</span>
-                <span className="font-bold text-emerald-800">+₹16,800 - ₹21,600 net</span>
+                <span className="text-slate-500">On 100 Qtl lot:</span>
+                <span className="font-bold text-emerald-800 tabular-nums">
+                  +₹{(chartMetrics.gainLow * 100).toLocaleString('en-IN')} - ₹{(chartMetrics.gainHigh * 100).toLocaleString('en-IN')} net
+                </span>
               </div>
             </div>
 
             <div className="space-y-2.5 text-xs text-slate-700">
               <div className="flex items-start gap-2.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
-                <span>Local mill inventories in Guntur district are critically down by 22% this week.</span>
+                <span>Local buyer inventories in {activeDistrict} district remain active with tight arrivals.</span>
               </div>
               <div className="flex items-start gap-2.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />

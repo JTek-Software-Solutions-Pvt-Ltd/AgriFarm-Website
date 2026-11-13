@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ActiveTab } from '../../../shared/types';
 import { useTranslation } from '../../../shared/i18n';
 import { useAppDispatch, useAppSelector } from '../../../app/store/hooks';
@@ -7,6 +7,13 @@ import {
   selectAuthUser,
   selectIsAuthenticated,
 } from '../../auth';
+import { describeWmoCode, selectWeatherUi } from '../../weather';
+import {
+  formatLiveClockTime,
+  formatWeekdayShortDateOffset,
+  getCurrentAgriSeason,
+  useLiveNow,
+} from '../../../shared/utils/dateTime';
 import {
   Download,
   PhoneCall,
@@ -41,14 +48,55 @@ export const MyCropsView: React.FC<MyCropsViewProps> = ({
   const dispatch = useAppDispatch();
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const user = useAppSelector(selectAuthUser);
+  const { location, current, forecast } = useAppSelector(selectWeatherUi);
+  const now = useLiveNow();
+
   const setActiveTab = onNavigateTab || propSetActiveTab || (() => {});
   const onOpenAiChat = onOpenDostAi || propOnOpenAiChat || (() => {});
+
+  const activeDistrict = useMemo(
+    () => location.district || user?.district || location.label.split(',')[0].trim() || 'Regional',
+    [location.district, location.label, user?.district]
+  );
+
+  const activeSeason = useMemo(() => getCurrentAgriSeason(now), [now]);
+  const completedStamp = useMemo(
+    () => formatLiveClockTime(new Date(now.getTime() - 40 * 60_000)),
+    [now]
+  );
+
+  const weatherHazard = useMemo(() => {
+    const maxWind = Math.round(
+      Math.max(current?.wind_speed_10m ?? 0, forecast[0]?.wind_speed_10m_max ?? 0)
+    );
+    const maxGust = Math.round(
+      Math.max(current?.wind_gusts_10m ?? 0, forecast[0]?.wind_speed_10m_max ?? 0)
+    );
+    const rain48 = Math.round(
+      forecast.slice(0, 2).reduce((sum, d) => sum + d.precipitation_sum, 0) * 10
+    ) / 10;
+    const peakProb = Math.max(
+      forecast[0]?.precipitation_probability_max ?? 0,
+      forecast[1]?.precipitation_probability_max ?? 0
+    );
+    const isSevereStorm = maxGust >= 40 || rain48 >= 45;
+    const wmo = current ? describeWmoCode(current.weather_code, current.is_day) : null;
+    return {
+      maxWind,
+      maxGust,
+      rain48,
+      peakProb,
+      isSevereStorm,
+      wmo,
+    };
+  }, [current, forecast]);
+
   // Interactive checklist state
   const [checklist, setChecklist] = useState([
     {
       id: 1,
       text: 'Secure farm machinery, solar pumps & knapsack sprayers in covered shed',
-      note: 'Completed today at 09:30 AM',
+      note: 'Completed earlier today',
       checked: true,
     },
     {
@@ -66,7 +114,7 @@ export const MyCropsView: React.FC<MyCropsViewProps> = ({
     {
       id: 4,
       text: 'Stake vulnerable vegetable & chilli patches with bamboo stakes',
-      note: 'Due Tomorrow, 10:00 AM • Prepare bamboo stakes',
+      note: 'Due Tomorrow morning • Prepare bamboo stakes',
       checked: false,
     },
     {
@@ -116,8 +164,16 @@ export const MyCropsView: React.FC<MyCropsViewProps> = ({
             <h1 className="font-serif text-2xl sm:text-3xl font-bold text-[#113e2e] tracking-tight">
               {t('myCrops.title')}
             </h1>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-bold border border-red-200">
-              {t('myCrops.cycloneEta')}
+            <span
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+                weatherHazard.isSevereStorm
+                  ? 'bg-red-100 text-red-700 border-red-200'
+                  : 'bg-emerald-100 text-[#113e2e] border-emerald-200'
+              }`}
+            >
+              {weatherHazard.isSevereStorm
+                ? `Severe Weather Watch • ${location.label}`
+                : `Live Microclimate Monitor • ${location.label}`}
             </span>
           </div>
         </div>
@@ -160,44 +216,55 @@ export const MyCropsView: React.FC<MyCropsViewProps> = ({
         </div>
       )}
 
-      {/* Cyclone Preparedness & Telemetry Banner */}
+      {/* Live Preparedness & Telemetry Banner */}
       <section className="rounded-3xl bg-white border border-[#d2e5d7] p-6 md:p-8 shadow-xs space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 pb-6 border-b border-[#e5ebe7] items-start">
           <div className="lg:col-span-7 space-y-2">
             <span className="text-[11px] font-bold text-slate-700 uppercase tracking-widest block">
-              SEVERE CYCLONIC STORM • BAY OF BENGAL
+              {weatherHazard.isSevereStorm
+                ? `HIGH WEATHER ALERT • ${location.label}`
+                : `${activeSeason} PARCEL PROTECTION • ${location.label}`}
             </span>
             <h2 className="font-serif text-xl md:text-2xl font-bold text-[#113e2e] leading-snug">
               {isAuthenticated && user
-                ? `Cyclone Alert: Preparedness & Mitigation Protocol for Your ${user.registeredParcelsCount} Active Crops`
-                : 'Cyclone Alert: Regional Crop Preparedness & Mitigation Protocol'}
+                ? `Preparedness & Mitigation Protocol for Your ${user.registeredParcelsCount} Active Crops`
+                : `Regional Crop Preparedness & Mitigation Protocol (${activeDistrict})`}
             </h2>
             <p className="text-sm text-slate-600 leading-relaxed pt-1">
               {isAuthenticated && user
-                ? `Immediate agronomic safeguard guidelines tailored to ${user.name}'s ${user.holding} holding in ${user.location}.`
-                : 'Standard agronomic safeguard guidelines for Coastal Andhra Kharif paddy, chilli, maize & groundnut crops.'}
+                ? `Agronomic safeguard guidelines tailored to ${user.name}'s ${user.holding} holding in ${user.location}.`
+                : `Standard ${activeSeason} agronomic safeguard guidelines for ${activeDistrict} paddy, chilli, maize & groundnut crops.`}
             </p>
           </div>
 
           <div className="lg:col-span-5 grid grid-cols-3 gap-4 pt-1">
             <div className="flex flex-col space-y-1">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">LANDFALL WINDOW</span>
-              <span className="text-base font-bold text-slate-900">42 Hours</span>
-              <span className="text-xs text-slate-500 leading-tight">Estimated Friday 04:00 AM</span>
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">FORECAST STATUS</span>
+              <span className="text-base font-bold text-slate-900">
+                {weatherHazard.wmo?.label || 'Syncing'}
+              </span>
+              <span className="text-xs text-slate-500 leading-tight notranslate" translate="no">
+                {formatWeekdayShortDateOffset(0, now)}
+              </span>
             </div>
             <div className="flex flex-col space-y-1">
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">WIND VELOCITY</span>
-              <span className="text-base font-bold text-slate-900">
-                85-95 <span className="text-xs font-normal text-slate-600">km/h</span>
+              <span className="text-base font-bold text-slate-900 tabular-nums notranslate" translate="no">
+                {current ? `${Math.round(current.wind_speed_10m)} ` : '-- '}
+                <span className="text-xs font-normal text-slate-600">km/h</span>
               </span>
-              <span className="text-xs text-slate-500 leading-tight">Gusts up to 105 km/h</span>
+              <span className="text-xs text-slate-500 leading-tight tabular-nums notranslate" translate="no">
+                Gusts up to {weatherHazard.maxGust} km/h
+              </span>
             </div>
             <div className="flex flex-col space-y-1">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">EXPECTED RAIN</span>
-              <span className="text-base font-bold text-slate-900">
-                85-110 <span className="text-xs font-normal text-slate-600">mm</span>
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">48H RAINFALL</span>
+              <span className="text-base font-bold text-slate-900 tabular-nums notranslate" translate="no">
+                {weatherHazard.rain48} <span className="text-xs font-normal text-slate-600">mm</span>
               </span>
-              <span className="text-xs text-slate-500 leading-tight">Heavy Coastal Inundation</span>
+              <span className="text-xs text-slate-500 leading-tight tabular-nums">
+                Peak {weatherHazard.peakProb}% chance
+              </span>
             </div>
           </div>
         </div>
@@ -328,7 +395,7 @@ export const MyCropsView: React.FC<MyCropsViewProps> = ({
                   <div>
                     <h3 className="font-serif font-bold text-base text-[#113e2e]">Paddy (Basmati 1509)</h3>
                     <span className="text-xs text-slate-500">
-                      {isAuthenticated ? 'Parcel A • 5.0 Acres • Vegetative (45 Days)' : 'Kharif Regional Stage • Vegetative (45 Days)'}
+                      {isAuthenticated ? 'Parcel A • 5.0 Acres • Vegetative (45 Days)' : `${activeSeason} Regional Stage • Vegetative (45 Days)`}
                     </span>
                   </div>
                 </div>
@@ -697,8 +764,10 @@ export const MyCropsView: React.FC<MyCropsViewProps> = ({
                     </span>
                     <p className="text-[11px] text-slate-500 mt-0.5">
                       {item.id === 1 && isAuthenticated && user
-                        ? `Completed today at 09:30 AM by ${user.name}`
-                        : item.note}
+                        ? `Completed today at ${completedStamp} by ${user.name}`
+                        : item.id === 1
+                          ? `Completed today at ${completedStamp}`
+                          : item.note}
                     </p>
                   </div>
                   {item.checked && <Check className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />}
@@ -801,7 +870,7 @@ export const MyCropsView: React.FC<MyCropsViewProps> = ({
                 </div>
                 <div>
                   <h4 className="font-serif font-bold text-base text-[#113e2e]">Krishi Vigyan Kendra Helpline</h4>
-                  <span className="text-xs text-slate-600">Lam Farm, Guntur • Direct Extension Desk</span>
+                  <span className="text-xs text-slate-600">{activeDistrict} • Direct Extension Desk</span>
                 </div>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed mb-4">
@@ -818,7 +887,7 @@ export const MyCropsView: React.FC<MyCropsViewProps> = ({
                 <span>0863-2524000</span>
               </a>
               <button
-                onClick={() => showNotice('WhatsApp query prepared for KVK Guntur Agronomist On-Duty.')}
+                onClick={() => showNotice(`WhatsApp query prepared for KVK ${activeDistrict} Agronomist On-Duty.`)}
                 className="flex-1 py-2.5 px-3 rounded-xl bg-[#175638] text-white text-xs font-bold text-center shadow-xs hover:bg-[#12452c] transition flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <span>WhatsApp KVK</span>

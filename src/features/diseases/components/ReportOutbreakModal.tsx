@@ -3,9 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, AlertTriangle, Send, Check } from 'lucide-react';
 import { useTranslation } from '../../../shared/i18n';
+import { useAppSelector } from '../../../app/store/hooks';
+import { selectAuthUser, selectIsAuthenticated } from '../../auth';
+import { selectWeatherUi } from '../../weather';
 
 interface ReportOutbreakModalProps {
   isOpen: boolean;
@@ -17,10 +20,22 @@ export const ReportOutbreakModal: React.FC<ReportOutbreakModalProps> = ({
   onClose,
 }) => {
   const { t } = useTranslation();
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const user = useAppSelector(selectAuthUser);
+  const { location } = useAppSelector(selectWeatherUi);
+
+  const defaultMandal = isAuthenticated && user?.location ? user.location : location.label;
+
   const [crop, setCrop] = useState('Rice / Paddy');
   const [symptoms, setSymptoms] = useState('');
-  const [mandal, setMandal] = useState('Mangalagiri, Guntur District');
+  const [mandal, setMandal] = useState(defaultMandal);
   const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setMandal(defaultMandal);
+    }
+  }, [defaultMandal, isOpen]);
 
   if (!isOpen) return null;
 
@@ -60,7 +75,7 @@ export const ReportOutbreakModal: React.FC<ReportOutbreakModalProps> = ({
             </div>
             <h4 className="font-bold text-sm text-[#113e2e]">Outbreak Bulletin Dispatched!</h4>
             <p className="text-xs text-slate-600 max-w-xs mx-auto">
-              Your report has been relayed to the Guntur Krishi Vigyan Kendra extension team and nearby farmers.
+              Your report has been relayed to the {mandal} Krishi Vigyan Kendra extension team and nearby farmers.
             </p>
           </div>
         ) : (

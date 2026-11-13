@@ -14,6 +14,14 @@ import {
   selectAuthUser,
   selectIsAuthenticated,
 } from '../../auth';
+import { selectWeatherUi } from '../../weather';
+import {
+  formatDateRangeOffset,
+  formatFullDisplayDate,
+  formatLiveClockTime,
+  formatShortDateOffset,
+  useLiveNow,
+} from '../../../shared/utils/dateTime';
 
 interface NotificationsViewProps {
   onNavigateTab: (tab: ActiveTab) => void;
@@ -30,6 +38,9 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
   const dispatch = useAppDispatch();
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const user = useAppSelector(selectAuthUser);
+  const { location, current, forecast } = useAppSelector(selectWeatherUi);
+  const now = useLiveNow();
+
   const [readIds, setReadIds] = useState<string[]>([]);
   const [dismissedIds, setDismissedIds] = useState<string[]>([]);
   const [activeFilter, setActiveFilter] = useState<string>('all');
@@ -41,11 +52,56 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
     voice: true,
   });
 
+  const activeDistrict = useMemo(
+    () => location.district || user?.district || location.label.split(',')[0].trim() || 'Regional',
+    [location.district, location.label, user?.district]
+  );
+
+  const liveGusts = Math.round(current?.wind_gusts_10m ?? forecast[0]?.wind_speed_10m_max ?? 18);
+  const liveRainProb = forecast[0]?.precipitation_probability_max ?? 20;
+  const liveSeverityPct = Math.min(95, Math.max(18, Math.round(liveGusts * 1.4 + liveRainProb * 0.45)));
+
   const items = useMemo<NotificationItem[]>(() => {
+    const yesterdayMinus2 = formatShortDateOffset(-2, false, now);
+    const yesterdayMinus3 = formatShortDateOffset(-3, false, now);
+    const yesterdayMinus4 = formatShortDateOffset(-4, false, now);
+
     return NOTIFICATIONS.filter(
       (n) => (isAuthenticated || !n.isPersonal) && !dismissedIds.includes(n.id)
-    ).map((n) => (readIds.includes(n.id) ? { ...n, read: true, isUnread: false } : n));
-  }, [isAuthenticated, dismissedIds, readIds]);
+    ).map((n) => {
+      const baseRead = readIds.includes(n.id) ? { read: true, isUnread: false } : {};
+      if (n.id === 'notif-1') {
+        const isHighWindOrRain = liveGusts >= 35 || liveRainProb >= 60;
+        return {
+          ...n,
+          ...baseRead,
+          title: isHighWindOrRain
+            ? `Heavy Rain & Wind Advisory for ${activeDistrict}`
+            : `Live Microclimate Briefing for ${activeDistrict}`,
+          description: current
+            ? `Current conditions at ${location.label}: ${Math.round(current.temperature_2m)}°C, RH ${current.relative_humidity_2m}%, wind gusts ${liveGusts} km/h, today rain prob ${liveRainProb}%.`
+            : n.description,
+          time: formatLiveClockTime(now),
+          severityTag: `${liveSeverityPct}% Index`,
+        };
+      }
+      if (n.id === 'notif-6') return { ...n, ...baseRead, time: `${yesterdayMinus2}, 02:15 PM` };
+      if (n.id === 'notif-7') return { ...n, ...baseRead, time: `${yesterdayMinus3}, 05:40 PM` };
+      if (n.id === 'notif-8') return { ...n, ...baseRead, time: `${yesterdayMinus4}, 09:00 AM` };
+      return { ...n, ...baseRead };
+    });
+  }, [
+    activeDistrict,
+    current,
+    dismissedIds,
+    isAuthenticated,
+    liveGusts,
+    liveRainProb,
+    liveSeverityPct,
+    location.label,
+    now,
+    readIds,
+  ]);
 
   const isItemRead = (item: NotificationItem) => item.read !== undefined ? item.read : !item.isUnread;
   const getItemText = (item: NotificationItem) => item.message || item.description || '';
@@ -243,7 +299,9 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
                     {todayItems.filter(i => !isItemRead(i)).length} New
                   </span>
                 </div>
-                <span className="text-xs text-slate-500">Wednesday, 29 October</span>
+                <span className="text-xs text-slate-500 notranslate" translate="no">
+                  {formatFullDisplayDate(now)}
+                </span>
               </div>
 
               {todayItems.map(item => {
@@ -296,14 +354,25 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
                         <div className="mt-2.5 p-2.5 rounded-lg bg-[#F8FAF7] border border-[#E7EFE7] flex items-center justify-between gap-3 flex-wrap">
                           <div className="flex items-center gap-2">
                             <span className="material-symbols-outlined text-emerald-700 text-base">air</span>
-                            <span className="text-xs text-slate-700 font-bold">Gust Velocity: 42 km/h</span>
-                            <span className="text-[11px] text-slate-500">• Tenali Corridor</span>
+                            <span className="text-xs text-slate-700 font-bold tabular-nums notranslate" translate="no">
+                              Gust Velocity: {liveGusts} km/h
+                            </span>
+                            <span className="text-[11px] text-slate-500">• {location.label}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <div className="w-16 h-1.5 rounded-full bg-slate-200 overflow-hidden">
-                              <div className="bg-red-600 w-3/4 h-full"></div>
+                              <div
+                                className={liveSeverityPct >= 65 ? 'bg-red-600 h-full' : 'bg-emerald-600 h-full'}
+                                style={{ width: `${liveSeverityPct}%` }}
+                              />
                             </div>
-                            <span className="text-[11px] font-bold text-red-600">78% Severity</span>
+                            <span
+                              className={`text-[11px] font-bold tabular-nums ${
+                                liveSeverityPct >= 65 ? 'text-red-600' : 'text-emerald-700'
+                              }`}
+                            >
+                              {liveSeverityPct}% Risk Index
+                            </span>
                           </div>
                         </div>
                       )}
@@ -341,7 +410,9 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
             <div className="space-y-3 pt-2">
               <div className="flex items-center justify-between pb-1">
                 <span className="text-base font-bold text-slate-900">Earlier This Week</span>
-                <span className="text-xs text-slate-500">24-27 October</span>
+                <span className="text-xs text-slate-500 tabular-nums notranslate" translate="no">
+                  {formatDateRangeOffset(-6, -2, now)}
+                </span>
               </div>
 
               {olderItems.map(item => {
@@ -527,7 +598,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
               </div>
 
               <div className="p-3 rounded-xl bg-white border border-[#E7EFE7]">
-                <p className="font-bold text-slate-800">Guntur Agricultural Officer</p>
+                <p className="font-bold text-slate-800">{activeDistrict} Agricultural Officer</p>
                 <p className="text-slate-900 font-bold mt-0.5">K. Prasad: +91 863 223 9100</p>
                 <p className="text-[10px] text-slate-500">Available Mon-Sat 9AM-5PM</p>
               </div>

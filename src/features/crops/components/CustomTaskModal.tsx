@@ -3,10 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { X, Calendar, Plus } from 'lucide-react';
 import { CalendarTask } from '../../../shared/types';
 import { useTranslation } from '../../../shared/i18n';
+import { useAppSelector } from '../../../app/store/hooks';
+import { selectAuthUser, selectCropOptionsUi, selectIsAuthenticated } from '../../auth';
+import { formatShortDateOffset } from '../../../shared/utils/dateTime';
 
 interface CustomTaskModalProps {
   isOpen: boolean;
@@ -22,10 +25,25 @@ export const CustomTaskModal: React.FC<CustomTaskModalProps> = ({
   onTaskCreated,
 }) => {
   const { t } = useTranslation();
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const user = useAppSelector(selectAuthUser);
+  const { crops: cropOptions } = useAppSelector(selectCropOptionsUi);
+
+  const defaultTiming = `Tomorrow (${formatShortDateOffset(1, false)}) • 08:00 AM`;
+
+  const primaryCropName = useMemo(() => {
+    if (!isAuthenticated || !user?.cropId) return null;
+    return cropOptions.find((c) => c.id === user.cropId)?.label ?? null;
+  }, [cropOptions, isAuthenticated, user?.cropId]);
+
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<'fertilizer' | 'pest' | 'irrigation' | 'harvest' | 'general'>('fertilizer');
-  const [field, setField] = useState('Field 1 (Basmati Rice - 5.0 Acres)');
-  const [timing, setTiming] = useState('Tomorrow • 08:00 AM');
+  const [field, setField] = useState(() =>
+    primaryCropName
+      ? `Primary Parcel (${primaryCropName})`
+      : 'Field 1 (Basmati Rice - 5.0 Acres)'
+  );
+  const [timing, setTiming] = useState(defaultTiming);
   const [description, setDescription] = useState('');
 
   if (!isOpen) return null;
@@ -50,7 +68,7 @@ export const CustomTaskModal: React.FC<CustomTaskModalProps> = ({
           ? 'Harvesting Operation'
           : 'Field Operation',
       field,
-      timing,
+      timing: timing.trim() || defaultTiming,
       dueDateLabel: 'Scheduled',
       isCompleted: false,
       actionButtonText: t('calendar.markDone'),
@@ -58,6 +76,9 @@ export const CustomTaskModal: React.FC<CustomTaskModalProps> = ({
 
     if (onAddTask) onAddTask(newTask);
     if (onTaskCreated) onTaskCreated(newTask);
+    setTitle('');
+    setDescription('');
+    setTiming(`Tomorrow (${formatShortDateOffset(1, false)}) • 08:00 AM`);
     onClose();
   };
 
@@ -117,6 +138,11 @@ export const CustomTaskModal: React.FC<CustomTaskModalProps> = ({
                 onChange={(e) => setField(e.target.value)}
                 className="w-full p-2.5 rounded-xl border border-[#d5e0d3] focus:ring-1 focus:ring-[#113e2e] outline-none text-xs bg-white cursor-pointer"
               >
+                {primaryCropName && (
+                  <option value={`Primary Parcel (${primaryCropName})`}>
+                    Primary Parcel ({primaryCropName})
+                  </option>
+                )}
                 <option value="Field 1 (Basmati Rice - 5.0 Acres)">Field 1 (Paddy 5.0 Ac)</option>
                 <option value="Field 2 (Chilli - 3.0 Acres)">Field 2 (Chilli 3.0 Ac)</option>
                 <option value="Field 3 (Maize - 2.5 Acres)">Field 3 (Maize 2.5 Ac)</option>

@@ -4,7 +4,8 @@
  */
 
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { ActiveTab } from '../../shared/types';
+import { ActiveTab, CalendarTask } from '../../shared/types';
+import { buildDynamicCalendarTasks } from '../../shared/utils/dateTime';
 
 export const ACTIVE_TAB_STORAGE_KEY = 'kd_active_tab';
 
@@ -96,6 +97,7 @@ export interface UiState {
   isScanModalOpen: boolean;
   isCustomTaskModalOpen: boolean;
   isReportModalOpen: boolean;
+  calendarTasks: CalendarTask[];
 }
 
 const initialState: UiState = {
@@ -105,6 +107,7 @@ const initialState: UiState = {
   isScanModalOpen: false,
   isCustomTaskModalOpen: false,
   isReportModalOpen: false,
+  calendarTasks: buildDynamicCalendarTasks(),
 };
 
 const uiSlice = createSlice({
@@ -131,6 +134,15 @@ const uiSlice = createSlice({
     setReportModalOpen(state, action: PayloadAction<boolean>) {
       state.isReportModalOpen = action.payload;
     },
+    addCalendarTask(state, action: PayloadAction<CalendarTask>) {
+      state.calendarTasks.unshift(action.payload);
+    },
+    toggleCalendarTask(state, action: PayloadAction<string>) {
+      const found = state.calendarTasks.find((task) => task.id === action.payload);
+      if (found) {
+        found.isCompleted = !found.isCompleted;
+      }
+    },
   },
 });
 
@@ -141,6 +153,10 @@ export const {
   setScanModalOpen,
   setCustomTaskModalOpen,
   setReportModalOpen,
+  addCalendarTask,
+  toggleCalendarTask,
 } = uiSlice.actions;
+
+export const selectCalendarTasks = (state: { ui: UiState }) => state.ui.calendarTasks;
 
 export default uiSlice.reducer;

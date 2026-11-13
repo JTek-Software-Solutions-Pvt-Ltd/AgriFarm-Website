@@ -8,7 +8,9 @@ import { ActiveTab } from '../types';
 import { PUBLIC_PLATFORM_ASSETS } from '../data/mockData';
 import { useTranslation } from '../i18n';
 import { useAppSelector } from '../../app/store/hooks';
+import { selectCalendarTasks } from '../../app/store/uiSlice';
 import { selectAuthUser, selectIsAuthenticated } from '../../features/auth';
+import { selectWeatherUi } from '../../features/weather';
 import {
   LayoutDashboard,
   Sprout,
@@ -41,6 +43,14 @@ export const Sidebar: React.FC<SidebarProps> = memo(({
   const { t } = useTranslation();
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const user = useAppSelector(selectAuthUser);
+  const { current, forecast } = useAppSelector(selectWeatherUi);
+  const calendarTasks = useAppSelector(selectCalendarTasks);
+
+  const pendingTaskCount = calendarTasks.filter((task) => !task.isCompleted).length;
+  const isSevereWeather = Boolean(
+    (current && (current.weather_code >= 95 || current.wind_gusts_10m >= 40 || current.rain >= 15)) ||
+      forecast.some((d) => d.precipitation_sum >= 30 || d.wind_speed_10m_max >= 38)
+  );
 
   const navItems: {
     id: ActiveTab;
@@ -57,13 +67,16 @@ export const Sidebar: React.FC<SidebarProps> = memo(({
       id: 'my-crops',
       label: t('nav.myCrops'),
       icon: <Sprout className="w-[18px] h-[18px]" />,
-      badge: t('nav.cycloneAlertBadge'),
+      badge: isSevereWeather ? 'Weather Alert' : undefined,
     },
     {
       id: 'crop-calendar',
       label: t('nav.cropCalendar'),
       icon: <Calendar className="w-[18px] h-[18px]" />,
-      badge: isAuthenticated ? t('nav.tasksBadge') : undefined,
+      badge:
+        isAuthenticated && pendingTaskCount > 0
+          ? `${pendingTaskCount} ${pendingTaskCount === 1 ? 'Task' : 'Tasks'}`
+          : undefined,
     },
     {
       id: 'diseases-library',
@@ -85,7 +98,11 @@ export const Sidebar: React.FC<SidebarProps> = memo(({
       id: 'weather',
       label: t('nav.weather'),
       icon: <CloudSun className="w-[18px] h-[18px]" />,
-      badge: t('nav.cycloneAlertBadge'),
+      badge: isSevereWeather
+        ? 'Severe Alert'
+        : current
+          ? `${Math.round(current.temperature_2m)}°C`
+          : t('nav.liveBadge'),
     },
     {
       id: 'notifications',

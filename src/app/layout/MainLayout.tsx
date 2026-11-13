@@ -11,6 +11,7 @@ import { Header } from '../../shared/components/Header';
 import { Sidebar } from '../../shared/components/Sidebar';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
+  addCalendarTask,
   setActiveTab,
   setAiChatOpen,
   setCustomTaskModalOpen,
@@ -61,7 +62,8 @@ const GlobalModals = memo(() => {
       <CustomTaskModal
         isOpen={isCustomTaskModalOpen}
         onClose={() => dispatch(setCustomTaskModalOpen(false))}
-        onTaskCreated={() => {
+        onTaskCreated={(task) => {
+          dispatch(addCalendarTask(task));
           dispatch(setCustomTaskModalOpen(false));
         }}
       />
