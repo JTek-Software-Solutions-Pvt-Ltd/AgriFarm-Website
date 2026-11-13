@@ -2,7 +2,7 @@ export interface Country {
   iso: string;
   name: string;
   dial: string;
-  min: number; // national number length
+  min: number; 
   max: number;
 }
 
