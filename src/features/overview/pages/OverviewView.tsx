@@ -539,7 +539,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             <h1 className="text-2xl sm:text-3xl font-bold font-serif text-[#14382d] flex items-baseline gap-1.5 mt-0.5">
               <span>{t('overview.greeting')},</span>
               <span key={isAuthenticated ? 'auth-name' : 'guest-name'}>
-                {isAuthenticated && user ? user.name.split(' ')[0] : 'Farmer Hari'}
+                {isAuthenticated && user ? user.name.split(' ')[0] : 'Farmer Hari Garu'}
               </span>
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">{t('nav.askDostAiSub')}</p>
