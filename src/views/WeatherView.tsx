@@ -690,7 +690,7 @@ export const WeatherView: React.FC<WeatherViewProps> = memo(({
             <div className="flex items-center justify-between mb-6 gap-3">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">
-                  <span>Live Weathersssssssssssssssssss Telemetry — </span>
+                  <span>Live Weathers Telemetry — </span>
                   <span key={location.label}>{location.label}</span>
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">
