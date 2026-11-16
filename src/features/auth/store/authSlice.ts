@@ -4,7 +4,12 @@
  */
 
 import { createAsyncThunk, createSelector, createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { CropOptionItem, RegisterRequestPayload, UserProfile } from '../../../shared/types';
+import {
+  CropOptionItem,
+  RegisterRequestPayload,
+  UpdateProfileRequestPayload,
+  UserProfile,
+} from '../../../shared/types';
 import {
   AUTH_API_BASE_URL,
   AUTH_ENDPOINTS,
@@ -13,13 +18,16 @@ import {
   extractJwtToken,
   findCountryByDialCode,
   findCountryByName,
+  formatPhoneForDisplay,
   isValidE164Mobile,
   mapApiUserToProfile,
   normalizeFullPhone,
+  resolveNumericUserId,
 } from '../services/authApi';
 import {
   clearAuthStorage,
   decodeJwtPayload,
+  getAuthHeaders,
   getStoredJwt,
   getStoredUser,
   saveAuthStorage,
@@ -50,6 +58,11 @@ export interface AuthState {
   cropsLoading: boolean;
   cropsLoaded: boolean;
   cropsError: string | null;
+  profileLoading: boolean;
+  profileLoaded: boolean;
+  profileUpdating: boolean;
+  profileError: string | null;
+  lastProfileUserId: string | null;
 }
 
 const OTP_RESEND_COOLDOWN_MS = 25_000;
@@ -83,6 +96,11 @@ const initialState: AuthState = {
   cropsLoading: false,
   cropsLoaded: false,
   cropsError: null,
+  profileLoading: false,
+  profileLoaded: false,
+  profileUpdating: false,
+  profileError: null,
+  lastProfileUserId: null,
 };
 
 function formatNetworkError(err: unknown, fallback: string): string {
@@ -480,6 +498,230 @@ export const verifyOtp = createAsyncThunk<
   }
 );
 
+/**
+ * Fetches the authenticated farmer profile via GET /api/auth/profile/{user_id}.
+ */
+export const fetchUserProfile = createAsyncThunk<
+  { user: UserProfile; userId: string },
+  { userId?: string; force?: boolean } | void,
+  { state: { auth: AuthState }; rejectValue: string }
+>(
+  'auth/fetchUserProfile',
+  async (arg, { getState, rejectWithValue, signal }) => {
+    const { auth } = getState();
+    const decoded = auth.token ? decodeJwtPayload(auth.token) : null;
+    const userId = arg?.userId || resolveNumericUserId(auth.user, decoded);
+    if (!userId) {
+      return rejectWithValue('Unable to determine user ID for profile lookup.');
+    }
+
+    try {
+      const response = await fetch(`${AUTH_API_BASE_URL}${AUTH_ENDPOINTS.GET_PROFILE(userId)}`, {
+        method: 'GET',
+        headers: {
+          accept: '*/*',
+          ...getAuthHeaders(),
+        },
+        signal,
+      });
+
+      const data = await response.json().catch(() => ({}));
+      const serverMsg = typeof data?.message === 'string' ? data.message : '';
+
+      if (!response.ok || data?.success === false) {
+        return rejectWithValue(serverMsg || 'Failed to fetch user profile.');
+      }
+
+      const mapped = mapApiUserToProfile(data, auth.user?.phone || '', null, decoded);
+      const current = auth.user;
+
+      const merged: UserProfile = {
+        ...(current || {}),
+        ...mapped,
+        // Preserve local workspace extensions not returned by GET /api/auth/profile/{user_id}
+        holding: data?.data?.holding || current?.holding || mapped.holding,
+        station: data?.data?.station || current?.station || mapped.station,
+        kisanId: data?.data?.kisanId || current?.kisanId || mapped.kisanId,
+        pmfbyPolicy: data?.data?.pmfbyPolicy || current?.pmfbyPolicy || mapped.pmfbyPolicy,
+        insuredSum: data?.data?.insuredSum || current?.insuredSum || mapped.insuredSum,
+        linkedBankMask:
+          data?.data?.linkedBankMask || current?.linkedBankMask || mapped.linkedBankMask,
+        registeredParcelsCount:
+          typeof data?.data?.registeredParcelsCount === 'number'
+            ? data.data.registeredParcelsCount
+            : current?.registeredParcelsCount ?? mapped.registeredParcelsCount,
+        landscape: data?.data?.landscape || current?.landscape || mapped.landscape,
+        // Respect explicit server photo_url when present; keep existing avatar if server photo_url is null and local had custom data
+        avatar: mapped.avatar || current?.avatar || '',
+      };
+
+      if (auth.token) {
+        saveAuthStorage(auth.token, merged);
+      }
+
+      return { user: merged, userId };
+    } catch (err) {
+      return rejectWithValue(formatNetworkError(err, 'Unable to load user profile.'));
+    }
+  },
+  {
+    condition: (arg, { getState }) => {
+      const { auth } = getState();
+      if (!auth.isAuthenticated) return false;
+      if (auth.profileLoading) return false;
+      const decoded = auth.token ? decodeJwtPayload(auth.token) : null;
+      const userId = arg?.userId || resolveNumericUserId(auth.user, decoded);
+      if (!userId) return false;
+      if (auth.profileLoaded && auth.lastProfileUserId === userId && !(arg && arg.force)) {
+        return false;
+      }
+      return true;
+    },
+  }
+);
+
+/**
+ * Updates the farmer profile via PUT /api/auth/updateProfile/{user_id} and syncs local session state.
+ */
+export const saveUserProfile = createAsyncThunk<
+  { user: UserProfile; message: string },
+  {
+    userId?: string;
+    apiPayload: UpdateProfileRequestPayload;
+    localOverrides?: Partial<UserProfile>;
+  },
+  { state: { auth: AuthState }; rejectValue: string }
+>(
+  'auth/saveUserProfile',
+  async ({ userId: explicitId, apiPayload, localOverrides }, { getState, rejectWithValue, signal }) => {
+    const { auth } = getState();
+    const decoded = auth.token ? decodeJwtPayload(auth.token) : null;
+    const userId = explicitId || resolveNumericUserId(auth.user, decoded);
+
+    if (!userId) {
+      return rejectWithValue('Unable to determine user ID for profile update.');
+    }
+
+    try {
+      const response = await fetch(
+        `${AUTH_API_BASE_URL}${AUTH_ENDPOINTS.UPDATE_PROFILE(userId)}`,
+        {
+          method: 'PUT',
+          headers: {
+            ...AUTH_REQUEST_HEADERS,
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify(apiPayload),
+          signal,
+        }
+      );
+
+      const data = await response.json().catch(() => ({}));
+      const serverMsg = typeof data?.message === 'string' ? data.message : '';
+
+      if (!response.ok || data?.success === false) {
+        return rejectWithValue(serverMsg || 'Failed to update profile.');
+      }
+
+      const serverProfile =
+        data?.data && typeof data.data === 'object'
+          ? mapApiUserToProfile(data, apiPayload.mobile, null, decoded)
+          : null;
+
+      const baseUser = auth.user;
+      const countryOpt =
+        findCountryByName(apiPayload.country) || findCountryByDialCode(apiPayload.mobile);
+      const formattedMobile = formatPhoneForDisplay(apiPayload.mobile, countryOpt.iso);
+      const nextVillage = apiPayload.village?.trim() || serverProfile?.village || baseUser?.village;
+      const nextDistrict = serverProfile?.district || apiPayload.district.trim();
+      const nextState = serverProfile?.state || apiPayload.state.trim();
+      const nextCountry = serverProfile?.country || apiPayload.country.trim() || 'India';
+      const locationParts = [nextVillage, nextDistrict, nextState].filter(Boolean);
+
+      const merged: UserProfile = {
+        ...(baseUser || {}),
+        ...(serverProfile || {}),
+        ...(localOverrides || {}),
+        id: serverProfile?.id || baseUser?.id || `farmer-${userId}`,
+        rawId: serverProfile?.rawId || baseUser?.rawId || String(userId),
+        name: serverProfile?.name || apiPayload.full_name.trim(),
+        phone: formattedMobile || serverProfile?.phone || baseUser?.phone || apiPayload.mobile,
+        email: serverProfile?.email || apiPayload.email || undefined,
+        role: localOverrides?.role || serverProfile?.role || baseUser?.role || 'Farmer account',
+        farmerPartner:
+          localOverrides?.farmerPartner ||
+          serverProfile?.farmerPartner ||
+          baseUser?.farmerPartner ||
+          'Farmer Partner',
+        holding: localOverrides?.holding || serverProfile?.holding || baseUser?.holding || '1.0 Acre',
+        station:
+          localOverrides?.station ||
+          serverProfile?.station ||
+          baseUser?.station ||
+          `Ag-Weather Station • ${nextVillage || nextDistrict || nextCountry}`,
+        kisanId:
+          localOverrides?.kisanId ||
+          serverProfile?.kisanId ||
+          baseUser?.kisanId ||
+          `KD-${String(userId).padStart(6, '0')}`,
+        pmfbyPolicy:
+          localOverrides?.pmfbyPolicy ||
+          serverProfile?.pmfbyPolicy ||
+          baseUser?.pmfbyPolicy ||
+          '',
+        insuredSum:
+          localOverrides?.insuredSum ||
+          serverProfile?.insuredSum ||
+          baseUser?.insuredSum ||
+          '',
+        linkedBankMask:
+          localOverrides?.linkedBankMask ||
+          serverProfile?.linkedBankMask ||
+          baseUser?.linkedBankMask ||
+          '',
+        landscape: serverProfile?.landscape || baseUser?.landscape || '',
+        registeredParcelsCount:
+          localOverrides?.registeredParcelsCount ??
+          serverProfile?.registeredParcelsCount ??
+          baseUser?.registeredParcelsCount ??
+          1,
+        avatar: serverProfile?.avatar || apiPayload.photo_url || '',
+        cropId: serverProfile?.cropId ?? apiPayload.crop_id,
+        country: nextCountry,
+        state: nextState || undefined,
+        district: nextDistrict || undefined,
+        village: nextVillage || undefined,
+        pincode: serverProfile?.pincode || apiPayload.pincode.trim() || undefined,
+        latitude:
+          serverProfile?.latitude ??
+          (typeof apiPayload.latitude === 'number' && Number.isFinite(apiPayload.latitude)
+            ? apiPayload.latitude
+            : undefined),
+        longitude:
+          serverProfile?.longitude ??
+          (typeof apiPayload.longitude === 'number' && Number.isFinite(apiPayload.longitude)
+            ? apiPayload.longitude
+            : undefined),
+        location:
+          locationParts.length > 0
+            ? locationParts.join(', ')
+            : nextCountry || baseUser?.location || '',
+      };
+
+      if (auth.token) {
+        saveAuthStorage(auth.token, merged);
+      }
+
+      return {
+        user: merged,
+        message: serverMsg || 'Profile updated successfully.',
+      };
+    } catch (err) {
+      return rejectWithValue(formatNetworkError(err, 'Unable to update profile.'));
+    }
+  }
+);
+
 const authSlice = createSlice({
   name: 'auth',
   initialState,
@@ -534,6 +776,28 @@ const authSlice = createSlice({
       state.lastOtpMobile = null;
       state.lastOtpSentAt = 0;
       state.lastFailedVerifyKey = null;
+      state.profileLoading = false;
+      state.profileLoaded = false;
+      state.profileUpdating = false;
+      state.profileError = null;
+      state.lastProfileUserId = null;
+    },
+    updateUserProfile(state, action: PayloadAction<Partial<UserProfile>>) {
+      if (!state.user) return;
+      const merged: UserProfile = {
+        ...state.user,
+        ...action.payload,
+      };
+      const locationParts = [merged.village, merged.district, merged.state].filter(Boolean);
+      if (locationParts.length > 0) {
+        merged.location = locationParts.join(', ');
+      } else if (merged.country) {
+        merged.location = merged.country;
+      }
+      state.user = merged;
+      if (state.token) {
+        saveAuthStorage(state.token, merged);
+      }
     },
   },
   extraReducers: (builder) => {
@@ -605,6 +869,8 @@ const authSlice = createSlice({
           state.pendingCountryIso = DEFAULT_COUNTRY_ISO;
           state.pendingRegisterData = null;
           state.statusMessage = null;
+          state.profileLoaded = false;
+          state.profileError = null;
         } else if (action.payload.outcome === 'already_registered') {
           state.pendingPhone = action.payload.mobile;
           state.pendingCountryIso = action.payload.countryIso;
@@ -649,6 +915,8 @@ const authSlice = createSlice({
         state.lastOtpMobile = null;
         state.lastOtpSentAt = 0;
         state.lastFailedVerifyKey = null;
+        state.profileLoaded = false;
+        state.profileError = null;
       })
       .addCase(verifyOtp.rejected, (state, action) => {
         state.verifyingOtp = false;
@@ -675,6 +943,42 @@ const authSlice = createSlice({
         if (!action.meta.condition) {
           state.cropsError = action.payload || 'Failed to load crops.';
         }
+      })
+      // fetchUserProfile
+      .addCase(fetchUserProfile.pending, (state) => {
+        state.profileLoading = true;
+        state.profileError = null;
+      })
+      .addCase(fetchUserProfile.fulfilled, (state, action) => {
+        state.profileLoading = false;
+        state.profileLoaded = true;
+        state.profileError = null;
+        state.lastProfileUserId = action.payload.userId;
+        state.user = action.payload.user;
+      })
+      .addCase(fetchUserProfile.rejected, (state, action) => {
+        state.profileLoading = false;
+        if (!action.meta.condition) {
+          state.profileError = action.payload || 'Failed to fetch user profile.';
+        }
+      })
+      // saveUserProfile
+      .addCase(saveUserProfile.pending, (state) => {
+        state.profileUpdating = true;
+        state.profileError = null;
+      })
+      .addCase(saveUserProfile.fulfilled, (state, action) => {
+        state.profileUpdating = false;
+        state.profileLoaded = true;
+        state.profileError = null;
+        state.user = action.payload.user;
+        state.lastProfileUserId = action.payload.user.rawId || state.lastProfileUserId;
+      })
+      .addCase(saveUserProfile.rejected, (state, action) => {
+        state.profileUpdating = false;
+        if (!action.meta.condition) {
+          state.profileError = action.payload || 'Failed to update profile.';
+        }
       });
   },
 });
@@ -685,6 +989,7 @@ export const {
   setAuthStep,
   clearAuthMessages,
   logout,
+  updateUserProfile,
 } = authSlice.actions;
 
 // Granular primitive & memoized selectors prevent unrelated UI re-renders
@@ -704,6 +1009,21 @@ export const selectCropOptionsUi = createSelector(
     cropsLoading,
     cropsLoaded,
     cropsError,
+  })
+);
+
+export const selectProfileUi = createSelector(
+  [
+    (state: { auth: AuthState }) => state.auth.profileLoading,
+    (state: { auth: AuthState }) => state.auth.profileLoaded,
+    (state: { auth: AuthState }) => state.auth.profileUpdating,
+    (state: { auth: AuthState }) => state.auth.profileError,
+  ],
+  (profileLoading, profileLoaded, profileUpdating, profileError) => ({
+    profileLoading,
+    profileLoaded,
+    profileUpdating,
+    profileError,
   })
 );
 

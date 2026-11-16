@@ -30,6 +30,7 @@ import {
   LogOut,
   MapPin,
   Sprout,
+  UserCog,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -237,6 +238,16 @@ export const Header: React.FC<HeaderProps> = memo(({
                   </div>
 
                   <div className="pt-2 border-t border-[#eef4ee] flex flex-col gap-1">
+                    <button
+                      onClick={() => {
+                        setActiveTab('profile');
+                        setProfileMenuOpen(false);
+                      }}
+                      className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-semibold text-[#113e2e] hover:bg-[#f0f7f2] transition flex items-center gap-2 cursor-pointer"
+                    >
+                      <UserCog className="w-3.5 h-3.5 text-[#175638]" />
+                      <span>{t('nav.profile')}</span>
+                    </button>
                     <button
                       onClick={() => {
                         setActiveTab('my-crops');

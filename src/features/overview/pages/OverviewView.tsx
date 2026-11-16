@@ -43,6 +43,7 @@ import {
   Lock,
   MapPin,
   RefreshCw,
+  UserCog,
 } from 'lucide-react';
 
 interface OverviewViewProps {
@@ -667,12 +668,24 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               <span>•</span>
               <span>{location.label}</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold font-serif text-[#14382d] flex items-baseline gap-1.5 mt-0.5">
-              <span>{t(getGreetingKey(now))},</span>
-              <span key={isAuthenticated ? 'auth-name' : 'guest-name'}>
-                {isAuthenticated && user ? user.name.split(' ')[0] : 'Farmer'}
-              </span>
-            </h1>
+            <div className="flex flex-wrap items-center gap-2.5 mt-0.5">
+              <h1 className="text-2xl sm:text-3xl font-bold font-serif text-[#14382d] flex items-baseline gap-1.5">
+                <span>{t(getGreetingKey(now))},</span>
+                <span key={isAuthenticated ? 'auth-name' : 'guest-name'}>
+                  {isAuthenticated && user ? user.name.split(' ')[0] : 'Farmer'}
+                </span>
+              </h1>
+              {isAuthenticated && user && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('profile')}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#f0f7f2] hover:bg-[#e1efe6] border border-[#cbe1d2] text-[11px] font-semibold text-[#113e2e] transition cursor-pointer whitespace-nowrap"
+                >
+                  <UserCog className="w-3.5 h-3.5 text-[#175638]" />
+                  <span>{t('nav.profile')}</span>
+                </button>
+              )}
+            </div>
             <p className="text-xs text-slate-500 mt-0.5">{t('nav.askDostAiSub')}</p>
           </div>
 

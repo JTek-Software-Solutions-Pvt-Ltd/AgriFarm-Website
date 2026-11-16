@@ -4,20 +4,25 @@
  */
 
 export { AuthModal } from './components/AuthModal';
+export { ProfileView } from './pages/ProfileView';
 export {
   default as authReducer,
   clearAuthMessages,
   closeAuthModal,
   fetchCropList,
+  fetchUserProfile,
   logout,
   openAuthModal,
   registerUser,
+  saveUserProfile,
   selectAuthModalUi,
   selectAuthUser,
   selectCropOptionsUi,
   selectIsAuthenticated,
+  selectProfileUi,
   sendOtp,
   setAuthStep,
+  updateUserProfile,
   verifyOtp,
 } from './store/authSlice';
 export type { AuthState, AuthStep, OtpOrigin } from './store/authSlice';

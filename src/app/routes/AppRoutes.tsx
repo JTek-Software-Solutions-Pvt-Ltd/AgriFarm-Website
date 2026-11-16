@@ -25,6 +25,7 @@ import { CropDoctorView } from '../../features/crop-doctor';
 import { WeatherView } from '../../features/weather';
 import { NotificationsView } from '../../features/notifications';
 import { LandingPageView } from '../../features/landing';
+import { ProfileView } from '../../features/auth';
 
 export const AppRoutes: React.FC = memo(() => {
   const dispatch = useAppDispatch();
@@ -154,6 +155,9 @@ export const AppRoutes: React.FC = memo(() => {
           onOpenScanModal={handleOpenScanCrop}
         />
       );
+
+    case 'profile':
+      return <ProfileView onNavigateTab={handleNavigateTab} />;
 
     case 'landing':
       return (

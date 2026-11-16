@@ -20,6 +20,10 @@ export const AUTH_ENDPOINTS = {
   SEND_OTP: '/api/auth/send-otp',
   VERIFY_OTP: '/api/auth/verify-otp',
   CROP_LIST: '/api/crop/cropList',
+  GET_PROFILE: (userId: string | number) =>
+    `/api/auth/profile/${encodeURIComponent(String(userId))}`,
+  UPDATE_PROFILE: (userId: string | number) =>
+    `/api/auth/updateProfile/${encodeURIComponent(String(userId))}`,
 } as const;
 
 export const AUTH_REQUEST_HEADERS: HeadersInit = DEFAULT_API_HEADERS;
@@ -209,8 +213,40 @@ export function extractJwtToken(payload: any): string | null {
   return cleaned.length > 0 ? cleaned : null;
 }
 
+function parseOptionalCoord(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === '') return undefined;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : undefined;
+}
+
+function parseOptionalCropId(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === '') return undefined;
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? num : undefined;
+}
+
 /**
- * Normalizes backend user objects (register / verify-otp / JWT claims) into UI UserProfile.
+ * Resolves the backend numeric/string user_id from UserProfile or JWT claims.
+ */
+export function resolveNumericUserId(
+  user: UserProfile | null,
+  decodedJwt?: JwtPayload | null
+): string | null {
+  const fromRaw = user?.rawId?.trim();
+  if (fromRaw) return fromRaw;
+
+  const fromId = user?.id?.replace(/^farmer-/, '').trim();
+  if (fromId) return fromId;
+
+  const fromJwt = decodedJwt?.userId ?? decodedJwt?.user_id ?? decodedJwt?.sub ?? decodedJwt?.id;
+  if (fromJwt !== undefined && fromJwt !== null && String(fromJwt).trim()) {
+    return String(fromJwt).trim();
+  }
+  return null;
+}
+
+/**
+ * Normalizes backend user objects (register / verify-otp / profile / JWT claims) into UI UserProfile.
  */
 export function mapApiUserToProfile(
   rawUser: any,
@@ -247,11 +283,19 @@ export function mapApiUserToProfile(
   const pincode = apiObj.pincode || registerFallback?.pincode || '';
   const email = apiObj.email || registerFallback?.email || '';
   const cropId =
-    typeof apiObj.crop_id === 'number' ? apiObj.crop_id : registerFallback?.crop_id;
+    parseOptionalCropId(apiObj.crop_id) ?? parseOptionalCropId(registerFallback?.crop_id);
+  const primaryCrop =
+    typeof apiObj.primary_crop === 'string' && apiObj.primary_crop.trim()
+      ? apiObj.primary_crop.trim()
+      : typeof apiObj.primaryCrop === 'string' && apiObj.primaryCrop.trim()
+        ? apiObj.primaryCrop.trim()
+        : undefined;
 
-  const latCandidate = Number(apiObj.latitude ?? registerFallback?.latitude);
-  const lngCandidate = Number(apiObj.longitude ?? registerFallback?.longitude);
-  const hasCoords = Number.isFinite(latCandidate) && Number.isFinite(lngCandidate);
+  const latCandidate =
+    parseOptionalCoord(apiObj.latitude) ?? parseOptionalCoord(registerFallback?.latitude);
+  const lngCandidate =
+    parseOptionalCoord(apiObj.longitude) ?? parseOptionalCoord(registerFallback?.longitude);
+  const hasCoords = latCandidate !== undefined && lngCandidate !== undefined;
 
   const locationParts = [village, district, state].filter(Boolean);
   const location =
@@ -264,11 +308,27 @@ export function mapApiUserToProfile(
   const formattedPhone = formatPhoneForDisplay(rawMobile, detectedCountry.iso);
   const nationalDigits = extractNationalDigits(rawMobile, detectedCountry.iso);
 
-  const rawId = apiObj.id ?? decodedJwt?.sub ?? decodedJwt?.userId ?? nationalDigits;
+  const rawIdCandidate =
+    apiObj.user_id ??
+    apiObj.id ??
+    decodedJwt?.userId ??
+    decodedJwt?.user_id ??
+    decodedJwt?.sub ??
+    nationalDigits;
+  const rawIdStr = String(rawIdCandidate);
+
+  const avatarCandidate =
+    typeof apiObj.photo_url === 'string' && apiObj.photo_url.trim()
+      ? apiObj.photo_url.trim()
+      : typeof apiObj.photoUrl === 'string' && apiObj.photoUrl.trim()
+        ? apiObj.photoUrl.trim()
+        : typeof apiObj.avatar === 'string' && apiObj.avatar.trim()
+          ? apiObj.avatar.trim()
+          : '';
 
   return {
-    id: `farmer-${rawId}`,
-    rawId: String(rawId),
+    id: `farmer-${rawIdStr}`,
+    rawId: rawIdStr,
     name: String(fullName).trim(),
     phone: formattedPhone,
     email: email || undefined,
@@ -282,11 +342,14 @@ export function mapApiUserToProfile(
     village: village || undefined,
     pincode: pincode || undefined,
     cropId,
+    ...(primaryCrop ? { primaryCrop } : {}),
     ...(hasCoords ? { latitude: latCandidate, longitude: lngCandidate } : {}),
     station: apiObj.station || `Ag-Weather Station • ${stationCity}`,
     kisanId:
       apiObj.kisanId ||
-      (apiObj.id ? `KD-${String(apiObj.id).padStart(6, '0')}` : USER_PROFILE.kisanId),
+      (apiObj.user_id || apiObj.id
+        ? `KD-${String(apiObj.user_id ?? apiObj.id).padStart(6, '0')}`
+        : USER_PROFILE.kisanId),
     pmfbyPolicy: apiObj.pmfbyPolicy || USER_PROFILE.pmfbyPolicy,
     insuredSum: apiObj.insuredSum || USER_PROFILE.insuredSum,
     linkedBankMask: apiObj.linkedBankMask || USER_PROFILE.linkedBankMask,
@@ -294,10 +357,7 @@ export function mapApiUserToProfile(
       typeof apiObj.registeredParcelsCount === 'number'
         ? apiObj.registeredParcelsCount
         : USER_PROFILE.registeredParcelsCount,
-    avatar:
-      typeof apiObj.avatar === 'string' && apiObj.avatar.trim()
-        ? apiObj.avatar.trim()
-        : '',
+    avatar: avatarCandidate,
     landscape: apiObj.landscape || PUBLIC_PLATFORM_ASSETS.landscape,
   };
 }

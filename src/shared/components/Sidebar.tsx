@@ -21,6 +21,7 @@ import {
   CloudSun,
   MessageSquare,
   Sparkles,
+  UserCog,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -109,6 +110,11 @@ export const Sidebar: React.FC<SidebarProps> = memo(({
       label: t('nav.notifications'),
       icon: <MessageSquare className="w-[18px] h-[18px]" />,
       badge: unreadCount > 0 ? `${unreadCount} ${t('common.unread')}` : undefined,
+    },
+    {
+      id: 'profile',
+      label: t('nav.profile'),
+      icon: <UserCog className="w-[18px] h-[18px]" />,
     },
     {
       id: 'landing',

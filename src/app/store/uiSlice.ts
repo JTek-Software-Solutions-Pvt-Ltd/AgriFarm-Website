@@ -23,6 +23,7 @@ const VALID_TABS = new Set<string>([
   'doctor',
   'weather',
   'notifications',
+  'profile',
   'landing',
 ]);
 

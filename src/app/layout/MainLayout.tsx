@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { memo, useCallback, useMemo } from 'react';
+import React, { memo, useCallback, useEffect, useMemo } from 'react';
 import { ActiveTab } from '../../shared/types';
 import { LanguageSelectorModal, useTranslation } from '../../shared/i18n';
 import { NOTIFICATIONS_DATA } from '../../shared/data/mockData';
@@ -19,7 +19,12 @@ import {
   setReportModalOpen,
   setScanModalOpen,
 } from '../store/uiSlice';
-import { AuthModal, selectIsAuthenticated } from '../../features/auth';
+import {
+  AuthModal,
+  fetchUserProfile,
+  selectIsAuthenticated,
+  selectProfileUi,
+} from '../../features/auth';
 import { LocationModal, WeatherSyncController } from '../../features/weather';
 import { DostAiModal } from '../../features/ai-assistant';
 import { ScanCropModal } from '../../features/crop-doctor';
@@ -85,8 +90,15 @@ export const MainLayout: React.FC<MainLayoutProps> = memo(({ children }) => {
   const dispatch = useAppDispatch();
   const { t } = useTranslation();
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const { profileLoaded, profileLoading, profileError } = useAppSelector(selectProfileUi);
   const activeTab = useAppSelector((state) => state.ui.activeTab);
   const mobileMenuOpen = useAppSelector((state) => state.ui.mobileMenuOpen);
+
+  useEffect(() => {
+    if (isAuthenticated && !profileLoaded && !profileLoading && !profileError) {
+      dispatch(fetchUserProfile());
+    }
+  }, [dispatch, isAuthenticated, profileLoaded, profileLoading, profileError]);
 
   const handleSetActiveTab = useCallback(
     (tab: ActiveTab) => dispatch(setActiveTab(tab)),

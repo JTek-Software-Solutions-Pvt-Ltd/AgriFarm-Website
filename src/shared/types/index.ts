@@ -12,6 +12,7 @@ export type ActiveTab =
   | 'doctor'
   | 'weather'
   | 'notifications'
+  | 'profile'
   | 'landing';
 
 export type Language = string;
@@ -132,6 +133,7 @@ export interface UserProfile {
   village?: string;
   pincode?: string;
   cropId?: number;
+  primaryCrop?: string;
   latitude?: number;
   longitude?: number;
   station: string;
@@ -156,6 +158,21 @@ export interface RegisterRequestPayload {
   village: string;
   latitude?: number;
   longitude?: number;
+}
+
+export interface UpdateProfileRequestPayload {
+  full_name: string;
+  photo_url: string | null;
+  email: string | null;
+  mobile: string;
+  crop_id: number;
+  country: string;
+  state: string;
+  district: string;
+  village?: string;
+  pincode: string;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 export interface DetectedAddress {

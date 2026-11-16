@@ -46,6 +46,7 @@ export const en = {
     farmStore: 'Farm store',
     weather: 'Weather',
     notifications: 'Alerts & Feed',
+    profile: 'Edit Profile',
     platformOverview: 'Platform Overview',
     cycloneAlertBadge: 'Cyclone Alert',
     tasksBadge: '3 Tasks',
@@ -266,6 +267,15 @@ export const en = {
     signInToEnableSms: 'Sign in to enable SMS alerts',
     regionalBenchmarks: 'Regional Crop Benchmarks',
     regionalBenchmarksSub: 'Standard Kharif crop metrics across Coastal Andhra. Sign in to track your own parcels.',
+  },
+  profile: {
+    title: 'Farmer Profile & Farm Settings',
+    subtitle: 'Manage your identity, primary crop, farm holding, and verified weather station coordinates.',
+    signInRequired: 'Sign in to edit your farmer profile',
+    signInRequiredSub: 'Verify your mobile number via OTP to update your personal details, primary crop, farm location, and PMFBY records.',
+    saveProfile: 'Save Profile',
+    discardChanges: 'Discard Changes',
+    savedSuccess: 'Profile updated and saved across your workspace.',
   },
 };
 
