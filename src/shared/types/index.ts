@@ -189,6 +189,10 @@ export interface DetectedAddress {
 export interface CropOptionItem {
   id: number;
   label: string;
+  slug?: string;
+  category?: string | null;
+  season?: string | null;
+  sourceName?: string | null;
 }
 
 export interface WeatherLocation {

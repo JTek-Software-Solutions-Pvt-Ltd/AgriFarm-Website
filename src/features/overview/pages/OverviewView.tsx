@@ -10,6 +10,7 @@ import {
   selectCropOptionsUi,
   selectIsAuthenticated,
 } from '../../auth';
+import { CropCatalogSection } from '../../crops';
 import {
   degreesToCompass,
   describeWmoCode,
@@ -547,9 +548,9 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   const activeSeason = useMemo(() => getCurrentAgriSeason(now), [now]);
 
   const userCropName = useMemo(() => {
-    if (!isAuthenticated || !user?.cropId) return null;
-    return cropOptions.find((c) => c.id === user.cropId)?.label ?? null;
-  }, [cropOptions, isAuthenticated, user?.cropId]);
+    if (!isAuthenticated || !user?.cropId) return user?.primaryCrop ?? null;
+    return cropOptions.find((c) => c.id === user.cropId)?.label ?? user.primaryCrop ?? null;
+  }, [cropOptions, isAuthenticated, user?.cropId, user?.primaryCrop]);
 
   const weatherOverview = useMemo(() => {
     const todayRain = forecast[0]?.precipitation_sum ?? 0;
@@ -1025,6 +1026,9 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           })}
         </div>
       </section>
+
+      {/* Live API Supported Crops Catalog */}
+      <CropCatalogSection onNavigateTab={setActiveTab} initialLimit={18} />
 
       {/* 2-Column: Crop Calendar Stats + Market Prices Preview */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">

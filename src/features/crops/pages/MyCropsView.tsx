@@ -7,6 +7,7 @@ import {
   selectAuthUser,
   selectIsAuthenticated,
 } from '../../auth';
+import { CropCatalogSection } from '../components/CropCatalogSection';
 import { describeWmoCode, selectWeatherUi } from '../../weather';
 import {
   formatLiveClockTime,
@@ -896,6 +897,9 @@ export const MyCropsView: React.FC<MyCropsViewProps> = ({
           </div>
         </div>
       </section>
+
+      {/* Live Backend Supported Crops Directory */}
+      <CropCatalogSection onNavigateTab={setActiveTab} initialLimit={24} />
     </div>
   );
 };

@@ -291,6 +291,10 @@ export const fetchCropList = createAsyncThunk<
         .map((item: any) => ({
           id: Number(item.id),
           label: String(item.name).trim(),
+          slug: typeof item.slug === 'string' ? item.slug : undefined,
+          category: typeof item.category === 'string' ? item.category : null,
+          season: typeof item.season === 'string' ? item.season : null,
+          sourceName: typeof item.source_name === 'string' ? item.source_name : null,
         }));
 
       if (normalized.length === 0) {

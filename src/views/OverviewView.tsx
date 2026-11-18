@@ -1286,14 +1286,13 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               ))}
             </div>
           </div>
-
           <div className="pt-2 text-right">
             <button
               onClick={() => setActiveTab('notifications')}
               className="text-xs font-bold text-[#175638] inline-flex items-center gap-1 hover:underline"
             >
               <span>Go to Alert Center</span>
-              <ChevronRight className="w-3.5 h-3.5" />
+              <ChevronRight className="w-6.5 h-3.5" />
             </button>
           </div>
         </div>

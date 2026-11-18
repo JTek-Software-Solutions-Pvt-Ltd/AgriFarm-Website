@@ -21,7 +21,9 @@ import {
 } from '../store/uiSlice';
 import {
   AuthModal,
+  fetchCropList,
   fetchUserProfile,
+  selectCropOptionsUi,
   selectIsAuthenticated,
   selectProfileUi,
 } from '../../features/auth';
@@ -91,8 +93,15 @@ export const MainLayout: React.FC<MainLayoutProps> = memo(({ children }) => {
   const { t } = useTranslation();
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const { profileLoaded, profileLoading, profileError } = useAppSelector(selectProfileUi);
+  const { cropsLoaded, cropsLoading, cropsError } = useAppSelector(selectCropOptionsUi);
   const activeTab = useAppSelector((state) => state.ui.activeTab);
   const mobileMenuOpen = useAppSelector((state) => state.ui.mobileMenuOpen);
+
+  useEffect(() => {
+    if (!cropsLoaded && !cropsLoading && !cropsError) {
+      dispatch(fetchCropList());
+    }
+  }, [dispatch, cropsLoaded, cropsLoading, cropsError]);
 
   useEffect(() => {
     if (isAuthenticated && !profileLoaded && !profileLoading && !profileError) {
