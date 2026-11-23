@@ -624,7 +624,6 @@ export async function fetchWeatherAdvisoryApi(
   let res: Response;
   try {
     res = await fetch(primaryUrl, requestInit);
-
     // If served from a static host without /ai proxy rules, attempt direct upstream URL
     if (res.status === 404 && !AI_API_BASE_URL) {
       res = await fetch(`http://20.12.240.74${path}`, requestInit);
