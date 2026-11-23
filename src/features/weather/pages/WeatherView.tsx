@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { memo, useCallback, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { ActiveTab } from '../../../shared/types';
 import { useTranslation } from '../../../shared/i18n';
 import { useAppDispatch, useAppSelector } from '../../../app/store/hooks';
@@ -12,11 +12,15 @@ import {
   selectIsAuthenticated,
 } from '../../auth/store/authSlice';
 import {
+  fetchWeatherAdvisory,
   fetchWeatherBundle,
   openLocationModal,
+  selectWeatherAdvisoryUi,
   selectWeatherUi,
+  setAdvisoryCropStage,
   setWeatherLocation,
 } from '../store/weatherSlice';
+import { WeatherAdvisorySection } from '../components/WeatherAdvisorySection';
 import { detectCurrentAddress } from '../../../shared/services/geolocation';
 import {
   degreesToCompass,
@@ -82,12 +86,14 @@ export const WeatherView: React.FC<WeatherViewProps> = memo(({
   onOpenDostAi,
   onNavigateTab,
 }) => {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const dispatch = useAppDispatch();
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const user = useAppSelector(selectAuthUser);
   const { location, meta, current, forecast, hourly, loading, error, lastFetchedAt } =
     useAppSelector(selectWeatherUi);
+  const { advisory, advisoryLoading, advisoryError, advisoryCropStage } =
+    useAppSelector(selectWeatherAdvisoryUi);
 
   const [locatingGps, setLocatingGps] = useState<boolean>(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
@@ -97,6 +103,58 @@ export const WeatherView: React.FC<WeatherViewProps> = memo(({
     isAuthenticated && user
       ? (user.rawId || user.id.replace(/^farmer-/, '')).trim() || undefined
       : undefined;
+
+  useEffect(() => {
+    dispatch(
+      fetchWeatherAdvisory({
+        userId: rawUserId,
+        locationName: location.label,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        cropStage: advisoryCropStage,
+        language: language || 'en',
+        forecastDays: 7,
+      })
+    );
+  }, [
+    dispatch,
+    rawUserId,
+    location.label,
+    location.latitude,
+    location.longitude,
+    advisoryCropStage,
+    language,
+  ]);
+
+  const handleRefreshAdvisory = useCallback(() => {
+    dispatch(
+      fetchWeatherAdvisory({
+        userId: rawUserId,
+        locationName: location.label,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        cropStage: advisoryCropStage,
+        language: language || 'en',
+        forecastDays: 7,
+        force: true,
+      })
+    );
+  }, [
+    dispatch,
+    rawUserId,
+    location.label,
+    location.latitude,
+    location.longitude,
+    advisoryCropStage,
+    language,
+  ]);
+
+  const handleChangeCropStage = useCallback(
+    (nextStage: string) => {
+      dispatch(setAdvisoryCropStage(nextStage));
+    },
+    [dispatch]
+  );
 
   const handleRefreshSensors = useCallback(() => {
     setGpsError(null);
@@ -108,7 +166,8 @@ export const WeatherView: React.FC<WeatherViewProps> = memo(({
         force: true,
       })
     );
-  }, [dispatch, rawUserId, location.latitude, location.longitude]);
+    handleRefreshAdvisory();
+  }, [dispatch, rawUserId, location.latitude, location.longitude, handleRefreshAdvisory]);
 
   const handleUseCurrentLocation = useCallback(async () => {
     if (locatingGps) return;
@@ -586,6 +645,18 @@ export const WeatherView: React.FC<WeatherViewProps> = memo(({
           </button>
         </div>
       )}
+
+      {/* AI Weather Advisory (/ai/api/v1/weather/advisory) */}
+      <WeatherAdvisorySection
+        advisory={advisory}
+        loading={advisoryLoading}
+        error={advisoryError}
+        cropStage={advisoryCropStage}
+        locationLabel={location.label}
+        onChangeCropStage={handleChangeCropStage}
+        onRefresh={handleRefreshAdvisory}
+        onNavigateTab={onNavigateTab}
+      />
 
       {/* Top Agronomic Decision Matrix (4 Cards Driven by Live APIs) */}
       {/* <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">

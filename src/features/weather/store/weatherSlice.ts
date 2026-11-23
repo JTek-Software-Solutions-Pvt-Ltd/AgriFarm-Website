@@ -8,14 +8,17 @@ import {
   CurrentWeatherData,
   DailyForecastItem,
   HourlyForecastItem,
+  WeatherAdvisoryResponse,
   WeatherLocation,
   WeatherMeta,
 } from '../../../shared/types';
 import {
+  CROP_STAGE_OPTIONS,
   DEFAULT_WEATHER_LOCATION,
   fetchCurrentWeatherApi,
   fetchForecastWeatherApi,
   fetchHourlyWeatherApi,
+  fetchWeatherAdvisoryApi,
   formatLocationLabel,
   geocodeAddressText,
   getStoredWeatherLocation,
@@ -40,11 +43,25 @@ export interface WeatherState {
   lastFetchedAt: number;
   lastGeocodedAddressKey: string | null;
   pendingAddressQuery: string | null;
+  advisory: WeatherAdvisoryResponse | null;
+  advisoryLoading: boolean;
+  advisoryError: string | null;
+  advisoryCropStage: string;
+  lastAdvisoryKey: string | null;
+  inFlightAdvisoryKey: string | null;
+  lastAdvisoryFetchedAt: number;
 }
 
 function normalizeOptionalUserId(userId?: string): string | undefined {
   const cleaned = (userId || '').replace(/^farmer-/, '').trim();
   return cleaned || undefined;
+}
+
+function normalizeAdvisoryUserId(userId?: string): number {
+  const cleaned = normalizeOptionalUserId(userId);
+  if (!cleaned) return 1;
+  const parsed = Number(cleaned);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
 }
 
 export function buildWeatherFetchKey(
@@ -53,6 +70,21 @@ export function buildWeatherFetchKey(
   longitude: number
 ): string {
   return `${normalizeOptionalUserId(userId) || 'guest'}|${latitude.toFixed(4)}|${longitude.toFixed(4)}`;
+}
+
+export function buildAdvisoryFetchKey(params: {
+  userId?: string;
+  latitude: number;
+  longitude: number;
+  cropStage?: string;
+  language?: string;
+  forecastDays?: number;
+}): string {
+  const uid = normalizeAdvisoryUserId(params.userId);
+  const stage = (params.cropStage || 'Vegetative').trim().toLowerCase();
+  const lang = (params.language || 'en').trim().toLowerCase();
+  const days = Math.min(16, Math.max(1, Math.trunc(params.forecastDays || 7)));
+  return `${uid}|${params.latitude.toFixed(4)}|${params.longitude.toFixed(4)}|${stage}|${lang}|${days}`;
 }
 
 function getInitialLocation(): WeatherLocation {
@@ -116,6 +148,13 @@ const initialState: WeatherState = {
   lastFetchedAt: 0,
   lastGeocodedAddressKey: null,
   pendingAddressQuery: null,
+  advisory: null,
+  advisoryLoading: false,
+  advisoryError: null,
+  advisoryCropStage: CROP_STAGE_OPTIONS[2],
+  lastAdvisoryKey: null,
+  inFlightAdvisoryKey: null,
+  lastAdvisoryFetchedAt: 0,
 };
 
 interface FetchWeatherArgs {
@@ -247,6 +286,105 @@ export const resolveManualAddressCoords = createAsyncThunk<
   }
 );
 
+export interface FetchWeatherAdvisoryArgs {
+  userId?: string;
+  locationName?: string;
+  latitude: number;
+  longitude: number;
+  cropStage?: string;
+  language?: string;
+  forecastDays?: number;
+  force?: boolean;
+}
+
+interface FetchWeatherAdvisoryResult {
+  key: string;
+  data: WeatherAdvisoryResponse;
+}
+
+export const fetchWeatherAdvisory = createAsyncThunk<
+  FetchWeatherAdvisoryResult,
+  FetchWeatherAdvisoryArgs,
+  { state: { weather: WeatherState }; rejectValue: string }
+>(
+  'weather/fetchAdvisory',
+  async (
+    { userId, locationName, latitude, longitude, cropStage, language, forecastDays },
+    { rejectWithValue, signal }
+  ) => {
+    const effectiveCropStage = (cropStage || 'Vegetative').trim().slice(0, 80) || 'Vegetative';
+    const effectiveLanguage = (language || 'en').trim().slice(0, 12).toLowerCase() || 'en';
+    const effectiveForecastDays = Math.min(16, Math.max(1, Math.trunc(forecastDays || 7)));
+    const trimmedLoc = (locationName || '').trim();
+    const effectiveLocationName = trimmedLoc.length >= 2 ? trimmedLoc.slice(0, 200) : null;
+
+    const key = buildAdvisoryFetchKey({
+      userId,
+      latitude,
+      longitude,
+      cropStage: effectiveCropStage,
+      language: effectiveLanguage,
+      forecastDays: effectiveForecastDays,
+    });
+
+    try {
+      const data = await fetchWeatherAdvisoryApi(
+        {
+          user_id: normalizeAdvisoryUserId(userId),
+          location_name: effectiveLocationName,
+          latitude,
+          longitude,
+          crop_stage: effectiveCropStage,
+          language: effectiveLanguage,
+          forecast_days: effectiveForecastDays,
+        },
+        signal
+      );
+
+      return { key, data };
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return rejectWithValue('Weather advisory request cancelled.');
+      }
+      return rejectWithValue(
+        err instanceof Error && err.message ? err.message : 'Unable to generate AI weather advisory.'
+      );
+    }
+  },
+  {
+    condition: (
+      { userId, latitude, longitude, cropStage, language, forecastDays, force },
+      { getState }
+    ) => {
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return false;
+      const { weather } = getState();
+      const key = buildAdvisoryFetchKey({
+        userId,
+        latitude,
+        longitude,
+        cropStage: cropStage || weather.advisoryCropStage,
+        language,
+        forecastDays,
+      });
+
+      if (weather.advisoryLoading && weather.inFlightAdvisoryKey === key) {
+        return false;
+      }
+
+      if (
+        !force &&
+        weather.lastAdvisoryKey === key &&
+        weather.advisory &&
+        Date.now() - weather.lastAdvisoryFetchedAt < WEATHER_CACHE_TTL_MS
+      ) {
+        return false;
+      }
+
+      return true;
+    },
+  }
+);
+
 const weatherSlice = createSlice({
   name: 'weather',
   initialState,
@@ -273,6 +411,16 @@ const weatherSlice = createSlice({
     },
     clearWeatherError(state) {
       if (state.error) state.error = null;
+    },
+    setAdvisoryCropStage(state, action: PayloadAction<string>) {
+      const nextStage = action.payload.trim() || CROP_STAGE_OPTIONS[2];
+      if (state.advisoryCropStage !== nextStage) {
+        state.advisoryCropStage = nextStage;
+        state.advisoryError = null;
+      }
+    },
+    clearWeatherAdvisoryError(state) {
+      if (state.advisoryError) state.advisoryError = null;
     },
   },
   extraReducers: (builder) => {
@@ -320,6 +468,51 @@ const weatherSlice = createSlice({
         if (action.payload && state.location.source !== 'gps') {
           state.location = action.payload;
           state.pendingAddressQuery = null;
+        }
+      })
+      .addCase(fetchWeatherAdvisory.pending, (state, action) => {
+        const arg = action.meta.arg;
+        state.advisoryLoading = true;
+        state.advisoryError = null;
+        state.inFlightAdvisoryKey = buildAdvisoryFetchKey({
+          userId: arg.userId,
+          latitude: arg.latitude,
+          longitude: arg.longitude,
+          cropStage: arg.cropStage || state.advisoryCropStage,
+          language: arg.language,
+          forecastDays: arg.forecastDays,
+        });
+      })
+      .addCase(fetchWeatherAdvisory.fulfilled, (state, action) => {
+        const currentCoordsSegment = `|${state.location.latitude.toFixed(4)}|${state.location.longitude.toFixed(4)}|`;
+        if (!action.payload.key.includes(currentCoordsSegment)) {
+          return;
+        }
+        state.advisoryLoading = false;
+        state.advisoryError = null;
+        state.inFlightAdvisoryKey = null;
+        state.lastAdvisoryKey = action.payload.key;
+        state.lastAdvisoryFetchedAt = Date.now();
+        state.advisory = action.payload.data;
+      })
+      .addCase(fetchWeatherAdvisory.rejected, (state, action) => {
+        const arg = action.meta.arg;
+        const rejectedKey = buildAdvisoryFetchKey({
+          userId: arg.userId,
+          latitude: arg.latitude,
+          longitude: arg.longitude,
+          cropStage: arg.cropStage || state.advisoryCropStage,
+          language: arg.language,
+          forecastDays: arg.forecastDays,
+        });
+        if (state.inFlightAdvisoryKey && state.inFlightAdvisoryKey !== rejectedKey) {
+          return;
+        }
+        state.advisoryLoading = false;
+        state.inFlightAdvisoryKey = null;
+        if (!action.meta.condition) {
+          state.advisoryError =
+            action.payload || 'Unable to generate AI weather advisory.';
         }
       })
       // Sync weather location when a user completes registration with GPS coords or address
@@ -458,6 +651,8 @@ export const {
   openLocationModal,
   closeLocationModal,
   clearWeatherError,
+  setAdvisoryCropStage,
+  clearWeatherAdvisoryError,
 } = weatherSlice.actions;
 
 // Primitive & memoized selectors prevent unnecessary re-renders
@@ -501,6 +696,23 @@ export const selectWeatherUi = createSelector(
     loading,
     error,
     lastFetchedAt,
+  })
+);
+
+export const selectWeatherAdvisoryUi = createSelector(
+  [
+    (state: { weather: WeatherState }) => state.weather.advisory,
+    (state: { weather: WeatherState }) => state.weather.advisoryLoading,
+    (state: { weather: WeatherState }) => state.weather.advisoryError,
+    (state: { weather: WeatherState }) => state.weather.advisoryCropStage,
+    (state: { weather: WeatherState }) => state.weather.lastAdvisoryFetchedAt,
+  ],
+  (advisory, advisoryLoading, advisoryError, advisoryCropStage, lastAdvisoryFetchedAt) => ({
+    advisory,
+    advisoryLoading,
+    advisoryError,
+    advisoryCropStage,
+    lastAdvisoryFetchedAt,
   })
 );
 

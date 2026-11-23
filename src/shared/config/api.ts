@@ -10,6 +10,12 @@ export const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || 'http://20.12.240.74:7000'
 ).replace(/\/$/, '');
 
+/**
+ * Uses VITE_AI_API_BASE_URL when configured, otherwise resolves same-origin /ai paths
+ * through the Vite dev/preview proxy to http://20.12.240.74/ai without CORS issues.
+ */
+export const AI_API_BASE_URL = (import.meta.env.VITE_AI_API_BASE_URL || '').replace(/\/$/, '');
+
 export const DEFAULT_API_HEADERS: HeadersInit = {
   accept: '*/*',
   'Content-Type': 'application/json',

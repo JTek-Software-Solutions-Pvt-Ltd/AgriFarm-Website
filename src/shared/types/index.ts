@@ -290,3 +290,180 @@ export interface AiChatMessage {
   timestamp: string;
   actions?: { label: string; tab?: ActiveTab; actionType?: string }[];
 }
+
+export interface WeatherAdvisoryRequest {
+  user_id: number;
+  location_name: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  crop_stage: string | null;
+  language: string;
+  forecast_days: number;
+}
+
+export interface WeatherAdvisoryAlertWindow {
+  window: string;
+  expected_time: string;
+  forecast_based: boolean;
+  official_warning: boolean;
+  source_type: string;
+}
+
+export interface WeatherAdvisoryAlert {
+  type: string;
+  severity: 'HIGH' | 'MEDIUM' | 'LOW' | string;
+  window: string;
+  expected_time: string;
+  description: string;
+  potential_crop_impact: string;
+  farmer_action: string;
+  observed_metrics?: Record<string, number | string | null>;
+  forecast_based?: boolean;
+  official_warning?: boolean;
+  windows?: WeatherAdvisoryAlertWindow[];
+  source_types?: string[];
+  expected_times?: string[];
+}
+
+export interface WeatherAdvisoryEvidence {
+  title: string;
+  url?: string;
+  supports?: string;
+}
+
+export interface WeatherAdvisoryCropIdentity {
+  status: string;
+  common_name: string | null;
+  scientific_name: string | null;
+  matched_database_name?: string | null;
+  production_purpose: string;
+  purpose_confidence?: string;
+  confidence: string;
+  resolution_basis?: string[];
+  evidence?: WeatherAdvisoryEvidence[];
+  farmer_confirmation_required?: boolean;
+  note?: string;
+}
+
+export interface WeatherAdvisoryBasedAction {
+  action: string;
+  trigger: string;
+  observed_value?: string;
+  priority: 'high' | 'medium' | 'low' | string;
+  basis: string;
+}
+
+export interface WeatherAdvisoryCropSpecificRecommendations {
+  status: string;
+  crop_name: string | null;
+  crop_identity: WeatherAdvisoryCropIdentity;
+  weather_based_actions: WeatherAdvisoryBasedAction[];
+  verified_agronomic_recommendations: Array<string | Record<string, unknown>>;
+  evidence_status?: string;
+  note?: string;
+}
+
+export interface FarmerActionPlanItem {
+  action: string;
+  reason: string;
+  priority: 'high' | 'medium' | 'low' | string;
+  alert_type?: string;
+  expected_time?: string;
+  source_type: string;
+}
+
+export interface FarmerActionPlan {
+  immediate: FarmerActionPlanItem[];
+  next_24_hours: FarmerActionPlanItem[];
+  next_3_7_days: FarmerActionPlanItem[];
+}
+
+export interface WeatherAdvisoryDataQuality {
+  weather_data_timestamp: string;
+  soil_data_timestamp: string | null;
+  advisory_generated_at: string;
+  missing_information: string[];
+  confidence: string;
+}
+
+export interface WeatherAdvisoryResponse {
+  success: boolean;
+  farmer_type: string;
+  language: string;
+  last_updated: string;
+  next_update: string;
+  location: {
+    village: string | null;
+    district: string | null;
+    state: string | null;
+    label: string | null;
+  };
+  weather: {
+    current: {
+      temperature_c: number;
+      feels_like_c: number;
+      humidity_percent: number;
+      rainfall_mm: number;
+      wind_speed_kmh: number;
+      wind_gust_kmh: number;
+      weather_code: number;
+      observed_at: string;
+    };
+    temperature_forecast: {
+      current_c: number;
+      apparent_c: number;
+      today_min_c: number;
+      today_max_c: number;
+      tomorrow_min_c: number;
+      tomorrow_max_c: number;
+      next_24h_min_c: number;
+      next_24h_max_c: number;
+    };
+    daily_forecast: Array<{
+      date: string;
+      minimum_temperature_c: number;
+      maximum_temperature_c: number;
+      rainfall_mm: number;
+      rain_probability_percent: number;
+      maximum_wind_gust_kmh: number;
+    }>;
+    hourly_forecast_available: boolean;
+    timezone: string;
+    forecast_retrieved_at: string;
+  };
+  crop_information: {
+    crop_name: string | null;
+    scientific_name: string | null;
+    crop_identity_status: string;
+    production_purpose: string;
+    database_crop_season: string | null;
+    growth_stage: string | null;
+    soil_type: string | null;
+    soil_ph: string | number | null;
+    soil_moisture: string | number | null;
+    current_season: string;
+    upcoming_season: string;
+  };
+  advisory: {
+    crop_name: string | null;
+    crop_stage: string | null;
+    current_season: string;
+    upcoming_season: string;
+    season_note: string;
+    weather_summary: string;
+    weather_alerts: WeatherAdvisoryAlert[];
+    crop_protection: string[];
+    irrigation_recommendations: string[];
+    crop_care_recommendations: string[];
+    preventive_measures: string[];
+    summary: string;
+    crop_identity?: WeatherAdvisoryCropIdentity;
+    crop_specific_recommendations?: WeatherAdvisoryCropSpecificRecommendations;
+    suitable_crops?: Array<string | { crop_name?: string; name?: string; reason?: string; note?: string; season?: string }>;
+    alternative_crops?: Array<string | { crop_name?: string; name?: string; reason?: string; note?: string; season?: string }>;
+    crop_recommendation_status?: string;
+    crop_recommendation_note?: string;
+  };
+  farmer_action_plan: FarmerActionPlan;
+  data_quality: WeatherAdvisoryDataQuality;
+}

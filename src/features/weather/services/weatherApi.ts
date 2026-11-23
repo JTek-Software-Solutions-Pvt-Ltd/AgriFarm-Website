@@ -7,16 +7,33 @@ import {
   CurrentWeatherData,
   DailyForecastItem,
   HourlyForecastItem,
+  WeatherAdvisoryRequest,
+  WeatherAdvisoryResponse,
   WeatherLocation,
   WeatherMeta,
 } from '../../../shared/types';
-import { API_BASE_URL } from '../../../shared/config/api';
+import {
+  AI_API_BASE_URL,
+  API_BASE_URL,
+  DEFAULT_API_HEADERS,
+} from '../../../shared/config/api';
 
 export const WEATHER_ENDPOINTS = {
   CURRENT: '/api/weather/current',
   FORECAST: '/api/weather/forecast',
   HOURLY: '/api/weather/hourly',
+  ADVISORY: '/ai/api/v1/weather/advisory',
 } as const;
+
+export const CROP_STAGE_OPTIONS = [
+  'Land Preparation',
+  'Seedling / Nursery',
+  'Vegetative',
+  'Flowering',
+  'Pod / Grain Filling',
+  'Maturity / Harvest',
+  'Post-Harvest',
+] as const;
 
 export const WEATHER_LOCATION_STORAGE_KEY = 'kd_weather_location';
 
@@ -565,4 +582,76 @@ export async function fetchHourlyWeatherApi(
     hourly: normalizeHourly(json.data.hourly),
     meta: buildMeta(json.data, latitude, longitude),
   };
+}
+
+export function formatAdvisoryTimestamp(isoStr?: string | null, timeZone?: string): string {
+  if (!isoStr) return '--';
+  const parsed = new Date(isoStr);
+  if (Number.isNaN(parsed.getTime())) {
+    return isoStr;
+  }
+  try {
+    return parsed.toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      ...(timeZone ? { timeZone } : {}),
+    });
+  } catch {
+    return parsed.toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+}
+
+export async function fetchWeatherAdvisoryApi(
+  payload: WeatherAdvisoryRequest,
+  signal?: AbortSignal
+): Promise<WeatherAdvisoryResponse> {
+  const path = WEATHER_ENDPOINTS.ADVISORY;
+  const primaryUrl = `${AI_API_BASE_URL}${path}`;
+  const requestInit: RequestInit = {
+    method: 'POST',
+    headers: DEFAULT_API_HEADERS,
+    body: JSON.stringify(payload),
+    signal,
+  };
+
+  let res: Response;
+  try {
+    res = await fetch(primaryUrl, requestInit);
+
+    // If served from a static host without /ai proxy rules, attempt direct upstream URL
+    if (res.status === 404 && !AI_API_BASE_URL) {
+      res = await fetch(`http://20.12.240.74${path}`, requestInit);
+    }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw err;
+    }
+    throw new Error(
+      'Unable to reach the AI Weather Advisory endpoint. When running locally, start the app with "npm run dev" (server.ts / Vite proxy) because http://20.12.240.74/ai rejects direct browser CORS requests.'
+    );
+  }
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json?.success !== true || !json?.advisory) {
+    const detailMsg = Array.isArray(json?.detail)
+      ? json.detail
+          .map((item: { msg?: string; loc?: Array<string | number> }) =>
+            item?.msg ? `${item.loc?.slice(-1)[0] ?? 'field'}: ${item.msg}` : ''
+          )
+          .filter(Boolean)
+          .join('; ')
+      : typeof json?.detail === 'string'
+        ? json.detail
+        : '';
+    throw new Error(detailMsg || json?.message || 'Unable to generate AI weather advisory.');
+  }
+
+  return json as WeatherAdvisoryResponse;
 }
