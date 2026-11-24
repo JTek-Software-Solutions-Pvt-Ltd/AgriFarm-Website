@@ -1038,7 +1038,6 @@ export const WeatherView: React.FC<WeatherViewProps> = memo(({
             <span>Ask Dost AI Weather Advisory</span>
           </button>
         </div>
-
         <div className="overflow-x-auto mt-4">
           <table className="w-full text-left text-xs">
             <thead>
