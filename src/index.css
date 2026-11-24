@@ -102,6 +102,5 @@ font[style] {
 }
 
 .skiptranslate:not(.notranslate):not(iframe):not(div) {
-  /* keep inline text nodes translation intact */
 }
 
