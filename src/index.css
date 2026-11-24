@@ -92,7 +92,6 @@ font[style] {
   box-shadow: none !important;
 }
 
-/* Prevent Google Translate element from displaying ugly select */
 #google_translate_element {
   display: none !important;
   visibility: hidden !important;
