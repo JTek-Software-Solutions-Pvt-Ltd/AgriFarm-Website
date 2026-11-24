@@ -1,26 +1,36 @@
-
 name: Deploy Kisan Dost Frontend
 
 on:
   push:
     branches:
       - main
+      - develop
+      - stage
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+# All branches deploy to the same site, so only one deploy can run at a time
 concurrency:
   group: kisandost-frontend-production
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Build and Deploy Frontend
+    name: Build and Deploy Frontend (${{ github.ref_name }})
     runs-on: ubuntu-latest
 
     steps:
+      - name: Check branch
+        run: |
+          case "${{ github.ref_name }}" in
+            main|develop|stage) echo "Deploying branch: ${{ github.ref_name }}" ;;
+            *) echo "Branch '${{ github.ref_name }}' is not configured for deployment."; exit 1 ;;
+          esac
+
       - name: Configure SSH
         env:
-          VM_HOST: ${{ secrets.AZURE_VM_HOST }}
-          VM_USER: ${{ secrets.AZURE_VM_USER }}
           SSH_PRIVATE_KEY: ${{ secrets.AZURE_VM_SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.AZURE_VM_KNOWN_HOSTS }}
         run: |
@@ -37,27 +47,30 @@ jobs:
         env:
           VM_HOST: ${{ secrets.AZURE_VM_HOST }}
           VM_USER: ${{ secrets.AZURE_VM_USER }}
+          DEPLOY_BRANCH: ${{ github.ref_name }}
         run: |
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile=~/.ssh/known_hosts \
-            "$VM_USER@$VM_HOST" 'bash -s' <<'REMOTE'
+            "$VM_USER@$VM_HOST" "bash -s -- '$DEPLOY_BRANCH'" <<'REMOTE'
 
           set -Eeuo pipefail
+
+          BRANCH="$1"
 
           APP_DIR="/home/azureuser/kisandost/Frontend"
           RELEASES_DIR="/home/azureuser/kisandost/frontend-releases"
 
           mkdir -p "$RELEASES_DIR"
 
-          echo "Fetching latest frontend code..."
+          echo "Fetching latest frontend code for $BRANCH..."
 
-          git -C "$APP_DIR" fetch origin main
+          git -C "$APP_DIR" fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
 
-          COMMIT=$(git -C "$APP_DIR" rev-parse origin/main)
+          COMMIT=$(git -C "$APP_DIR" rev-parse "origin/$BRANCH")
           RELEASE="$RELEASES_DIR/$COMMIT"
 
-          echo "Deploying commit: $COMMIT"
+          echo "Deploying $BRANCH at commit: $COMMIT"
 
           BUILD_DIR=""
 
@@ -136,6 +149,7 @@ jobs:
           fi
 
           echo "Frontend deployment successful."
+          echo "Active branch: $BRANCH"
           echo "Active release: $COMMIT"
 
           REMOTE
