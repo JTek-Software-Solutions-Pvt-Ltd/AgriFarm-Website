@@ -8,19 +8,27 @@ import { ActiveTab } from '../../../shared/types';
 import { useTranslation } from '../../../shared/i18n';
 import { useAppDispatch, useAppSelector } from '../../../app/store/hooks';
 import {
+  openAuthModal,
   selectAuthUser,
   selectIsAuthenticated,
+  selectProfileUi,
+  syncProfileWithLocation,
 } from '../../auth/store/authSlice';
 import {
+  fetchImdDistrictBundle,
   fetchWeatherAdvisory,
   fetchWeatherBundle,
   openLocationModal,
+  selectImdStation,
   selectWeatherAdvisoryUi,
+  selectWeatherImdUi,
   selectWeatherUi,
   setAdvisoryCropStage,
   setWeatherLocation,
 } from '../store/weatherSlice';
 import { WeatherAdvisorySection } from '../components/WeatherAdvisorySection';
+import { ImdWeatherSection } from '../components/ImdWeatherSection';
+import { resolveProfileImdIds } from '../services/imdWeatherApi';
 import { detectCurrentAddress } from '../../../shared/services/geolocation';
 import {
   degreesToCompass,
@@ -90,10 +98,12 @@ export const WeatherView: React.FC<WeatherViewProps> = memo(({
   const dispatch = useAppDispatch();
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const user = useAppSelector(selectAuthUser);
+  const { locationSyncing } = useAppSelector(selectProfileUi);
   const { location, meta, current, forecast, hourly, loading, error, lastFetchedAt } =
     useAppSelector(selectWeatherUi);
   const { advisory, advisoryLoading, advisoryError, advisoryCropStage } =
     useAppSelector(selectWeatherAdvisoryUi);
+  const imdUi = useAppSelector(selectWeatherImdUi);
 
   const [locatingGps, setLocatingGps] = useState<boolean>(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
@@ -103,6 +113,11 @@ export const WeatherView: React.FC<WeatherViewProps> = memo(({
     isAuthenticated && user
       ? (user.rawId || user.id.replace(/^farmer-/, '')).trim() || undefined
       : undefined;
+
+  const { stationId: profileStationId, districtId: profileDistrictId } = useMemo(
+    () => resolveProfileImdIds(location, isAuthenticated ? user : null),
+    [isAuthenticated, location, user]
+  );
 
   useEffect(() => {
     dispatch(
@@ -125,6 +140,67 @@ export const WeatherView: React.FC<WeatherViewProps> = memo(({
     advisoryCropStage,
     language,
   ]);
+
+  useEffect(() => {
+    if (!isAuthenticated || locationSyncing) return;
+    dispatch(
+      fetchImdDistrictBundle({
+        userId: rawUserId,
+        districtId: profileDistrictId,
+        latitude: location.latitude,
+        longitude: location.longitude,
+      })
+    );
+  }, [
+    dispatch,
+    isAuthenticated,
+    locationSyncing,
+    rawUserId,
+    profileDistrictId,
+    location.latitude,
+    location.longitude,
+  ]);
+
+  const handleRefreshImd = useCallback(() => {
+    if (!isAuthenticated) return;
+    dispatch(
+      fetchWeatherBundle({
+        userId: rawUserId,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        stationId: profileStationId,
+        force: true,
+      })
+    );
+    dispatch(
+      fetchImdDistrictBundle({
+        userId: rawUserId,
+        districtId: profileDistrictId,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        force: true,
+      })
+    );
+  }, [
+    dispatch,
+    isAuthenticated,
+    rawUserId,
+    location.latitude,
+    location.longitude,
+    profileStationId,
+    profileDistrictId,
+  ]);
+
+  const handleSelectImdStation = useCallback(
+    (stationId: string) => {
+      dispatch(selectImdStation(stationId));
+    },
+    [dispatch]
+  );
+
+  const handleOpenAuthFromImd = useCallback(() => {
+    dispatch(openAuthModal());
+  }, [dispatch]);
 
   const handleRefreshAdvisory = useCallback(() => {
     dispatch(
@@ -163,11 +239,32 @@ export const WeatherView: React.FC<WeatherViewProps> = memo(({
         userId: rawUserId,
         latitude: location.latitude,
         longitude: location.longitude,
+        stationId: profileStationId,
         force: true,
       })
     );
     handleRefreshAdvisory();
-  }, [dispatch, rawUserId, location.latitude, location.longitude, handleRefreshAdvisory]);
+    if (isAuthenticated) {
+      dispatch(
+        fetchImdDistrictBundle({
+          userId: rawUserId,
+          districtId: profileDistrictId,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          force: true,
+        })
+      );
+    }
+  }, [
+    dispatch,
+    rawUserId,
+    location.latitude,
+    location.longitude,
+    profileStationId,
+    handleRefreshAdvisory,
+    isAuthenticated,
+    profileDistrictId,
+  ]);
 
   const handleUseCurrentLocation = useCallback(async () => {
     if (locatingGps) return;
@@ -178,23 +275,31 @@ export const WeatherView: React.FC<WeatherViewProps> = memo(({
       const detected = await detectCurrentAddress();
       const nextLabel =
         detected.label || `${detected.latitude.toFixed(4)}, ${detected.longitude.toFixed(4)}`;
-      dispatch(
-        setWeatherLocation({
-          latitude: detected.latitude,
-          longitude: detected.longitude,
-          label: nextLabel,
-          state: detected.state || undefined,
-          district: detected.district || undefined,
-          village: detected.village || undefined,
-          pincode: detected.pincode || undefined,
-          source: 'gps',
-        })
-      );
+      const nextLocation = {
+        latitude: detected.latitude,
+        longitude: detected.longitude,
+        label: nextLabel,
+        country: detected.country || undefined,
+        state: detected.state || undefined,
+        district: detected.district || undefined,
+        village: detected.village || undefined,
+        pincode: detected.pincode || undefined,
+        source: 'gps' as const,
+      };
+      dispatch(setWeatherLocation(nextLocation));
+      const synced = isAuthenticated
+        ? await dispatch(syncProfileWithLocation(nextLocation)).unwrap()
+        : false;
       setActionNotice(
-        `Weather location updated to ${nextLabel} (${formatCoords(
-          detected.latitude,
-          detected.longitude
-        )}).`
+        synced
+          ? `Weather and profile location updated to ${nextLabel} (${formatCoords(
+              detected.latitude,
+              detected.longitude
+            )}).`
+          : `Weather location updated to ${nextLabel} (${formatCoords(
+              detected.latitude,
+              detected.longitude
+            )}).`
       );
     } catch (err) {
       setGpsError(
@@ -205,7 +310,7 @@ export const WeatherView: React.FC<WeatherViewProps> = memo(({
     } finally {
       setLocatingGps(false);
     }
-  }, [dispatch, locatingGps]);
+  }, [dispatch, isAuthenticated, locatingGps]);
 
   const todayForecast = forecast[0] || null;
   const currentWmo = useMemo(
@@ -656,6 +761,27 @@ export const WeatherView: React.FC<WeatherViewProps> = memo(({
         onChangeCropStage={handleChangeCropStage}
         onRefresh={handleRefreshAdvisory}
         onNavigateTab={onNavigateTab}
+      />
+
+      {/* Authenticated IMD Meteorological Bureau Telemetry */}
+      <ImdWeatherSection
+        isAuthenticated={isAuthenticated}
+        locationLabel={location.label}
+        current={imdUi.current}
+        stations={imdUi.stations}
+        currentStationId={imdUi.currentStationId || profileStationId || null}
+        forecast={imdUi.forecast}
+        forecastStationId={imdUi.forecastStationId || profileStationId || null}
+        warnings={imdUi.warnings}
+        districtId={imdUi.districtId || profileDistrictId || null}
+        rainfall={imdUi.rainfall}
+        loading={imdUi.loading || loading}
+        error={imdUi.error}
+        sectionErrors={imdUi.sectionErrors}
+        weatherSource={imdUi.weatherSource}
+        onRefresh={handleRefreshImd}
+        onSelectStation={handleSelectImdStation}
+        onOpenAuth={handleOpenAuthFromImd}
       />
 
       {/* Top Agronomic Decision Matrix (4 Cards Driven by Live APIs) */}

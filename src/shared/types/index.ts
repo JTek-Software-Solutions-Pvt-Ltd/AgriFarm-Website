@@ -136,6 +136,9 @@ export interface UserProfile {
   primaryCrop?: string;
   latitude?: number;
   longitude?: number;
+  imdDistrictId?: string;
+  cityForecastStationCode?: string;
+  imdStationId?: string;
   station: string;
   kisanId: string;
   pmfbyPolicy: string;
@@ -199,6 +202,7 @@ export interface WeatherLocation {
   latitude: number;
   longitude: number;
   label: string;
+  country?: string;
   state?: string;
   district?: string;
   village?: string;
@@ -467,3 +471,171 @@ export interface WeatherAdvisoryResponse {
   farmer_action_plan: FarmerActionPlan;
   data_quality: WeatherAdvisoryDataQuality;
 }
+
+export interface WelcomeRequest {
+  user_id: number;
+  language: string;
+  location_name: string | null;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+export interface WelcomeFarmerCrop {
+  id?: number | null;
+  name?: string | null;
+  scientific_name?: string | null;
+  category?: string | null;
+  season?: string | null;
+  crop_details?: Record<string, unknown> | string | null;
+}
+
+export interface WelcomeFarmerLocation {
+  village?: string | null;
+  district?: string | null;
+  state?: string | null;
+  label?: string | null;
+}
+
+export interface WelcomeVoicePayload {
+  available?: boolean;
+  language?: string | null;
+  format?: string | null;
+  audio_base64?: string | null;
+}
+
+export interface WelcomeResponse {
+  success: boolean;
+  session_id?: string | null;
+  message: string;
+  farmer?: {
+    user_id?: number;
+    name?: string | null;
+    crop?: WelcomeFarmerCrop | null;
+    location?: WelcomeFarmerLocation | null;
+  } | null;
+  weather?: Record<string, unknown> | null;
+  weather_alerts?: Array<Record<string, unknown> | string>;
+  voice?: WelcomeVoicePayload | null;
+  generated_at?: string | null;
+}
+
+export interface ImdCurrentObservation {
+  'Station Id': string;
+  Station: string;
+  'Date of Observation'?: string | null;
+  Time?: string | number | null;
+  'Mean Sea Level Pressure'?: string | number | null;
+  'Wind Direction'?: string | number | null;
+  'Wind Speed KMPH'?: string | number | null;
+  Temperature?: string | number | null;
+  'Weather Code'?: string | number | null;
+  Nebulosity?: string | number | null;
+  Humidity?: string | number | null;
+  'Last 24 hrs Rainfall'?: string | number | null;
+  'Feel Like'?: string | number | null;
+  WEATHER_ICON?: number | null;
+  WEATHER_MESSAGE?: string | null;
+  BACKGROUND?: string | null;
+  BACKGROUND_URL?: string | null;
+  Sunrise?: string | null;
+  Sunset?: string | null;
+  Moonrise?: string | null;
+  Moonset?: string | null;
+}
+
+export interface ImdForecastObservation {
+  Date?: string | null;
+  Station_Code?: string | null;
+  Station_Name?: string | null;
+  Today_Max_temp?: string | number | null;
+  Today_Max_Departure_from_Normal?: string | number | null;
+  Previous_Day_Max_temp?: string | number | null;
+  Previous_Day_Max_Departure_from_Normal?: string | number | null;
+  Today_Min_temp?: string | number | null;
+  Today_Min_Departure_from_Normal?: string | number | null;
+  Past_24_hrs_Rainfall?: string | number | null;
+  Relative_Humidity_at_0830?: string | number | null;
+  Relative_Humidity_at_1730?: string | number | null;
+  Previous_Day_Relative_Humidity_at_1730?: string | number | null;
+  Sunset_time?: string | null;
+  Sunrise_time?: string | null;
+  Moonset_time?: string | null;
+  Moonrise_time?: string | null;
+  Todays_Forecast_Max_Temp?: string | number | null;
+  Todays_Forecast_Min_temp?: string | number | null;
+  Todays_Forecast?: string | null;
+  Day_2_Max_Temp?: string | number | null;
+  Day_2_Min_temp?: string | number | null;
+  Day_2_Forecast?: string | null;
+  Day_3_Max_Temp?: string | number | null;
+  Day_3_Min_temp?: string | number | null;
+  Day_3_Forecast?: string | null;
+  Day_4_Max_Temp?: string | number | null;
+  Day_4_Min_temp?: string | number | null;
+  Day_4_Forecast?: string | null;
+  Day_5_Max_Temp?: string | number | null;
+  Day_5_Min_temp?: string | number | null;
+  Day_5_Forecast?: string | null;
+  Day_6_Max_Temp?: string | number | null;
+  Day_6_Min_temp?: string | number | null;
+  Day_6_Forecast?: string | null;
+  Day_7_Max_Temp?: string | number | null;
+  Day_7_Min_temp?: string | number | null;
+  Day_7_Forecast?: string | null;
+  Latitude?: string | number | null;
+  Longitude?: string | number | null;
+}
+
+export interface ImdDistrictWarning {
+  Obj_id?: string | null;
+  Date?: string | null;
+  District?: string | null;
+  Day_1?: string | null;
+  Day_2?: string | null;
+  Day_3?: string | null;
+  Day_4?: string | null;
+  Day_5?: string | null;
+  Day1_Color?: string | null;
+  Day2_Color?: string | null;
+  Day3_Color?: string | null;
+  Day4_Color?: string | null;
+  Day5_Color?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ImdDistrictRainfall {
+  OBJ_ID?: string | null;
+  District?: string | null;
+  State?: string | null;
+  Date?: string | null;
+  'Daily Actual'?: string | number | null;
+  'Daily Normal'?: string | number | null;
+  'Daily Departure Per'?: string | null;
+  'Daily Category'?: string | null;
+  'Week Date'?: string | null;
+  'Weekly Actual'?: string | number | null;
+  'Weekly Normal'?: string | number | null;
+  'Weekly Departure Per'?: string | null;
+  'Weekly Category'?: string | null;
+  'Cumulative Date'?: string | null;
+  'Cumulative Actual'?: string | number | null;
+  'Cumulative Normal'?: string | number | null;
+  'Cumulative Departue Per'?: string | null;
+  'Cumulative Departure Per'?: string | null;
+  'Cumulative Category'?: string | null;
+  'Monthly Date'?: string | null;
+  'Monthly Acutual'?: string | number | null;
+  'Monthly Actual'?: string | number | null;
+  'Monthly Normal'?: string | number | null;
+  'Monthly Departure Per'?: string | null;
+  'Monthly Category'?: string | null;
+}
+
+export interface ImdWeatherErrors {
+  current?: string;
+  forecast?: string;
+  warnings?: string;
+  rainfall?: string;
+}
+
+

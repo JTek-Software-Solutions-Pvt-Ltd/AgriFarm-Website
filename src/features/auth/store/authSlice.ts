@@ -9,6 +9,7 @@ import {
   RegisterRequestPayload,
   UpdateProfileRequestPayload,
   UserProfile,
+  WeatherLocation,
 } from '../../../shared/types';
 import {
   AUTH_API_BASE_URL,
@@ -61,6 +62,7 @@ export interface AuthState {
   profileLoading: boolean;
   profileLoaded: boolean;
   profileUpdating: boolean;
+  locationSyncing: boolean;
   profileError: string | null;
   lastProfileUserId: string | null;
 }
@@ -99,6 +101,7 @@ const initialState: AuthState = {
   profileLoading: false,
   profileLoaded: false,
   profileUpdating: false,
+  locationSyncing: false,
   profileError: null,
   lastProfileUserId: null,
 };
@@ -544,7 +547,7 @@ export const fetchUserProfile = createAsyncThunk<
         ...mapped,
         // Preserve local workspace extensions not returned by GET /api/auth/profile/{user_id}
         holding: data?.data?.holding || current?.holding || mapped.holding,
-        station: data?.data?.station || current?.station || mapped.station,
+        station: data?.data?.station || mapped.station || current?.station,
         kisanId: data?.data?.kisanId || current?.kisanId || mapped.kisanId,
         pmfbyPolicy: data?.data?.pmfbyPolicy || current?.pmfbyPolicy || mapped.pmfbyPolicy,
         insuredSum: data?.data?.insuredSum || current?.insuredSum || mapped.insuredSum,
@@ -593,6 +596,7 @@ export const saveUserProfile = createAsyncThunk<
     userId?: string;
     apiPayload: UpdateProfileRequestPayload;
     localOverrides?: Partial<UserProfile>;
+    silent?: boolean;
   },
   { state: { auth: AuthState }; rejectValue: string }
 >(
@@ -627,20 +631,77 @@ export const saveUserProfile = createAsyncThunk<
         return rejectWithValue(serverMsg || 'Failed to update profile.');
       }
 
-      const serverProfile =
+      let serverProfile =
         data?.data && typeof data.data === 'object'
           ? mapApiUserToProfile(data, apiPayload.mobile, null, decoded)
           : null;
+
+      // PUT /updateProfile may omit computed IMD station/district codes; fetch GET /profile if missing
+      if (
+        !serverProfile?.imdDistrictId &&
+        !serverProfile?.cityForecastStationCode &&
+        !serverProfile?.imdStationId
+      ) {
+        try {
+          const profileRes = await fetch(
+            `${AUTH_API_BASE_URL}${AUTH_ENDPOINTS.GET_PROFILE(userId)}`,
+            {
+              method: 'GET',
+              headers: {
+                accept: '*/*',
+                ...getAuthHeaders(),
+              },
+              signal,
+            }
+          );
+          const profileJson = await profileRes.json().catch(() => null);
+          if (profileRes.ok && profileJson?.success !== false && profileJson?.data) {
+            serverProfile = mapApiUserToProfile(
+              profileJson,
+              apiPayload.mobile,
+              null,
+              decoded
+            );
+          }
+        } catch {
+          // Keep PUT response if profile re-read fails transiently
+        }
+      }
 
       const baseUser = auth.user;
       const countryOpt =
         findCountryByName(apiPayload.country) || findCountryByDialCode(apiPayload.mobile);
       const formattedMobile = formatPhoneForDisplay(apiPayload.mobile, countryOpt.iso);
-      const nextVillage = apiPayload.village?.trim() || serverProfile?.village || baseUser?.village;
+      const hasVillageOverride = Boolean(localOverrides && 'village' in localOverrides);
+      const nextVillage = hasVillageOverride
+        ? localOverrides?.village?.trim() || undefined
+        : apiPayload.village?.trim() || serverProfile?.village || baseUser?.village;
       const nextDistrict = serverProfile?.district || apiPayload.district.trim();
       const nextState = serverProfile?.state || apiPayload.state.trim();
       const nextCountry = serverProfile?.country || apiPayload.country.trim() || 'India';
       const locationParts = [nextVillage, nextDistrict, nextState].filter(Boolean);
+
+      const locationChanged =
+        (typeof apiPayload.latitude === 'number' &&
+          typeof baseUser?.latitude === 'number' &&
+          (Math.abs(apiPayload.latitude - baseUser.latitude) > 0.25 ||
+            Math.abs((apiPayload.longitude ?? 0) - (baseUser.longitude ?? 0)) > 0.25)) ||
+        (apiPayload.district.trim().toLowerCase() !==
+          (baseUser?.district || '').trim().toLowerCase() &&
+          apiPayload.district.trim().length > 0);
+
+      const resolvedImdDistrictId =
+        serverProfile?.imdDistrictId ??
+        localOverrides?.imdDistrictId ??
+        (locationChanged ? undefined : baseUser?.imdDistrictId);
+      const resolvedCityForecastCode =
+        serverProfile?.cityForecastStationCode ??
+        localOverrides?.cityForecastStationCode ??
+        (locationChanged ? undefined : baseUser?.cityForecastStationCode);
+      const resolvedImdStationId =
+        serverProfile?.imdStationId ??
+        localOverrides?.imdStationId ??
+        (locationChanged ? undefined : baseUser?.imdStationId);
 
       const merged: UserProfile = {
         ...(baseUser || {}),
@@ -661,8 +722,9 @@ export const saveUserProfile = createAsyncThunk<
         station:
           localOverrides?.station ||
           serverProfile?.station ||
-          baseUser?.station ||
-          `Ag-Weather Station • ${nextVillage || nextDistrict || nextCountry}`,
+          (nextVillage || nextDistrict || nextCountry
+            ? `Ag-Weather Station • ${nextVillage || nextDistrict || nextCountry}`
+            : baseUser?.station || 'Ag-Weather Station'),
         kisanId:
           localOverrides?.kisanId ||
           serverProfile?.kisanId ||
@@ -695,17 +757,27 @@ export const saveUserProfile = createAsyncThunk<
         state: nextState || undefined,
         district: nextDistrict || undefined,
         village: nextVillage || undefined,
-        pincode: serverProfile?.pincode || apiPayload.pincode.trim() || undefined,
+        pincode:
+          localOverrides && 'pincode' in localOverrides
+            ? localOverrides.pincode?.trim() || undefined
+            : serverProfile?.pincode || apiPayload.pincode.trim() || undefined,
         latitude:
-          serverProfile?.latitude ??
-          (typeof apiPayload.latitude === 'number' && Number.isFinite(apiPayload.latitude)
-            ? apiPayload.latitude
-            : undefined),
+          localOverrides && typeof localOverrides.latitude === 'number'
+            ? localOverrides.latitude
+            : serverProfile?.latitude ??
+              (typeof apiPayload.latitude === 'number' && Number.isFinite(apiPayload.latitude)
+                ? apiPayload.latitude
+                : undefined),
         longitude:
-          serverProfile?.longitude ??
-          (typeof apiPayload.longitude === 'number' && Number.isFinite(apiPayload.longitude)
-            ? apiPayload.longitude
-            : undefined),
+          localOverrides && typeof localOverrides.longitude === 'number'
+            ? localOverrides.longitude
+            : serverProfile?.longitude ??
+              (typeof apiPayload.longitude === 'number' && Number.isFinite(apiPayload.longitude)
+                ? apiPayload.longitude
+                : undefined),
+        imdDistrictId: resolvedImdDistrictId,
+        cityForecastStationCode: resolvedCityForecastCode,
+        imdStationId: resolvedImdStationId,
         location:
           locationParts.length > 0
             ? locationParts.join(', ')
@@ -725,6 +797,91 @@ export const saveUserProfile = createAsyncThunk<
     }
   }
 );
+
+/**
+ * Syncs any weather/GPS/manual location change into the logged-in farmer's backend profile
+ * via PUT /api/auth/updateProfile/{user_id} and updates local Redux + persisted auth state.
+ */
+export const syncProfileWithLocation = createAsyncThunk<
+  boolean,
+  WeatherLocation,
+  { state: { auth: AuthState } }
+>('auth/syncProfileWithLocation', async (loc, { dispatch, getState }) => {
+  const { auth } = getState();
+  if (!auth.isAuthenticated || !auth.token || !auth.user) return false;
+
+  const user = auth.user;
+  const decoded = decodeJwtPayload(auth.token);
+  const userId = resolveNumericUserId(user, decoded);
+  if (!userId) return false;
+
+  const hasAddressParts = Boolean(
+    loc.village?.trim() || loc.district?.trim() || loc.state?.trim()
+  );
+  const nextCountry = (loc.country || user.country || 'India').trim() || 'India';
+  const nextVillage = loc.village?.trim() || '';
+  const nextState =
+    loc.state?.trim() || (!hasAddressParts ? user.state?.trim() || '' : '');
+  const nextDistrict =
+    loc.district?.trim() ||
+    nextVillage ||
+    nextState ||
+    loc.label.split(',')[0]?.trim() ||
+    (!hasAddressParts ? user.district?.trim() || '' : '');
+  const nextPincode = loc.pincode?.trim() || '';
+
+  const fallbackCountryIso =
+    findCountryByName(nextCountry)?.iso || DEFAULT_COUNTRY_ISO;
+  const detectedCountry = findCountryByDialCode(user.phone, fallbackCountryIso);
+  const normalizedMobile = normalizeFullPhone(user.phone, detectedCountry.iso);
+  if (!isValidE164Mobile(normalizedMobile)) return false;
+
+  const apiPayload: UpdateProfileRequestPayload = {
+    full_name: (user.name || 'Farmer').trim(),
+    photo_url: user.avatar?.trim() || null,
+    email: user.email?.trim() || null,
+    mobile: normalizedMobile,
+    crop_id: typeof user.cropId === 'number' && user.cropId > 0 ? user.cropId : 1,
+    country: nextCountry,
+    state: nextState,
+    district: nextDistrict,
+    ...(nextVillage ? { village: nextVillage } : {}),
+    pincode: nextPincode,
+    latitude: Number.isFinite(loc.latitude) ? loc.latitude : null,
+    longitude: Number.isFinite(loc.longitude) ? loc.longitude : null,
+  };
+
+  try {
+    await dispatch(
+      saveUserProfile({
+        userId,
+        apiPayload,
+        silent: true,
+        localOverrides: {
+          country: nextCountry,
+          state: nextState || undefined,
+          district: nextDistrict || undefined,
+          village: nextVillage || undefined,
+          pincode: nextPincode || undefined,
+          latitude: Number.isFinite(loc.latitude) ? loc.latitude : undefined,
+          longitude: Number.isFinite(loc.longitude) ? loc.longitude : undefined,
+          station: `Ag-Weather Station • ${nextVillage || nextDistrict || nextCountry}`,
+        },
+      })
+    ).unwrap();
+    return true;
+  } catch (err) {
+    console.warn(
+      '[LocationProfileSync]',
+      typeof err === 'string' && err
+        ? err
+        : err instanceof Error && err.message
+          ? err.message
+          : 'Failed to sync location with profile.'
+    );
+    return false;
+  }
+});
 
 const authSlice = createSlice({
   name: 'auth',
@@ -783,6 +940,7 @@ const authSlice = createSlice({
       state.profileLoading = false;
       state.profileLoaded = false;
       state.profileUpdating = false;
+      state.locationSyncing = false;
       state.profileError = null;
       state.lastProfileUserId = null;
     },
@@ -967,22 +1125,38 @@ const authSlice = createSlice({
         }
       })
       // saveUserProfile
-      .addCase(saveUserProfile.pending, (state) => {
-        state.profileUpdating = true;
-        state.profileError = null;
+      .addCase(saveUserProfile.pending, (state, action) => {
+        if (!action.meta.arg.silent) {
+          state.profileUpdating = true;
+          state.profileError = null;
+        }
       })
       .addCase(saveUserProfile.fulfilled, (state, action) => {
-        state.profileUpdating = false;
+        if (!action.meta.arg.silent) {
+          state.profileUpdating = false;
+          state.profileError = null;
+        }
         state.profileLoaded = true;
-        state.profileError = null;
         state.user = action.payload.user;
         state.lastProfileUserId = action.payload.user.rawId || state.lastProfileUserId;
       })
       .addCase(saveUserProfile.rejected, (state, action) => {
-        state.profileUpdating = false;
-        if (!action.meta.condition) {
-          state.profileError = action.payload || 'Failed to update profile.';
+        if (!action.meta.arg.silent) {
+          state.profileUpdating = false;
+          if (!action.meta.condition) {
+            state.profileError = action.payload || 'Failed to update profile.';
+          }
         }
+      })
+      // syncProfileWithLocation
+      .addCase(syncProfileWithLocation.pending, (state) => {
+        state.locationSyncing = true;
+      })
+      .addCase(syncProfileWithLocation.fulfilled, (state) => {
+        state.locationSyncing = false;
+      })
+      .addCase(syncProfileWithLocation.rejected, (state) => {
+        state.locationSyncing = false;
       });
   },
 });
@@ -1021,12 +1195,14 @@ export const selectProfileUi = createSelector(
     (state: { auth: AuthState }) => state.auth.profileLoading,
     (state: { auth: AuthState }) => state.auth.profileLoaded,
     (state: { auth: AuthState }) => state.auth.profileUpdating,
+    (state: { auth: AuthState }) => state.auth.locationSyncing,
     (state: { auth: AuthState }) => state.auth.profileError,
   ],
-  (profileLoading, profileLoaded, profileUpdating, profileError) => ({
+  (profileLoading, profileLoaded, profileUpdating, locationSyncing, profileError) => ({
     profileLoading,
     profileLoaded,
     profileUpdating,
+    locationSyncing,
     profileError,
   })
 );

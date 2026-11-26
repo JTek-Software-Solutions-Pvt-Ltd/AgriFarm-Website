@@ -95,6 +95,8 @@ export interface UiState {
   activeTab: ActiveTab;
   mobileMenuOpen: boolean;
   isAiChatOpen: boolean;
+  aiSessionId: string | null;
+  aiWelcomeMessage: string | null;
   isScanModalOpen: boolean;
   isCustomTaskModalOpen: boolean;
   isReportModalOpen: boolean;
@@ -105,6 +107,8 @@ const initialState: UiState = {
   activeTab: getInitialActiveTab(),
   mobileMenuOpen: false,
   isAiChatOpen: false,
+  aiSessionId: null,
+  aiWelcomeMessage: null,
   isScanModalOpen: false,
   isCustomTaskModalOpen: false,
   isReportModalOpen: false,
@@ -125,6 +129,18 @@ const uiSlice = createSlice({
     },
     setAiChatOpen(state, action: PayloadAction<boolean>) {
       state.isAiChatOpen = action.payload;
+      if (!action.payload) {
+        state.aiSessionId = null;
+        state.aiWelcomeMessage = null;
+      }
+    },
+    openAiChatWithSession(
+      state,
+      action: PayloadAction<{ sessionId?: string | null; welcomeMessage?: string | null }>
+    ) {
+      state.isAiChatOpen = true;
+      state.aiSessionId = action.payload.sessionId?.trim() || null;
+      state.aiWelcomeMessage = action.payload.welcomeMessage?.trim() || null;
     },
     setScanModalOpen(state, action: PayloadAction<boolean>) {
       state.isScanModalOpen = action.payload;
@@ -151,6 +167,7 @@ export const {
   setActiveTab,
   setMobileMenuOpen,
   setAiChatOpen,
+  openAiChatWithSession,
   setScanModalOpen,
   setCustomTaskModalOpen,
   setReportModalOpen,

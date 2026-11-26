@@ -19,6 +19,7 @@ import {
   formatForecastDate,
   formatIsoTimeShort,
   openLocationModal,
+  resolveProfileImdIds,
   selectWeatherUi,
 } from '../../weather';
 import {
@@ -194,11 +195,13 @@ const OverviewWeatherSection = memo<{ onOpenWeather: () => void }>(({ onOpenWeat
   }, [forecast, hourly]);
 
   const handleRefresh = () => {
+    const { stationId } = resolveProfileImdIds(location, isAuthenticated ? user : null);
     dispatch(
       fetchWeatherBundle({
         userId: rawUserId,
         latitude: location.latitude,
         longitude: location.longitude,
+        stationId,
         force: true,
       })
     );

@@ -31,6 +31,7 @@ import {
   selectCropOptionsUi,
   selectIsAuthenticated,
   selectProfileUi,
+  syncProfileWithLocation,
 } from '../store/authSlice';
 import {
   COUNTRY_OPTIONS,
@@ -207,6 +208,28 @@ export const ProfileView: React.FC<ProfileViewProps> = memo(({ onNavigateTab }) 
     setLocatingGps(true);
     try {
       const detected = await detectCurrentAddress();
+      const nextLabel =
+        detected.label ||
+        formatLocationLabel({
+          village: detected.village,
+          district: detected.district,
+          state: detected.state,
+          country: detected.country,
+          latitude: detected.latitude,
+          longitude: detected.longitude,
+        });
+      const gpsLocation = {
+        latitude: detected.latitude,
+        longitude: detected.longitude,
+        label: nextLabel,
+        country: detected.country || undefined,
+        state: detected.state || undefined,
+        district: detected.district || undefined,
+        village: detected.village || undefined,
+        pincode: detected.pincode || undefined,
+        source: 'gps' as const,
+      };
+
       setForm((prev) =>
         prev
           ? {
@@ -221,7 +244,17 @@ export const ProfileView: React.FC<ProfileViewProps> = memo(({ onNavigateTab }) 
             }
           : prev
       );
-      setSuccessMsg(t('auth.addressDetected'));
+
+      if (syncWeatherOnSave) {
+        dispatch(setWeatherLocation(gpsLocation));
+      }
+
+      if (!isDirtyRef.current) {
+        const synced = await dispatch(syncProfileWithLocation(gpsLocation)).unwrap();
+        setSuccessMsg(synced ? t('profile.savedSuccess') : t('auth.addressDetected'));
+      } else {
+        setSuccessMsg(t('auth.addressDetected'));
+      }
     } catch (err) {
       setErrorMsg(
         err instanceof Error && err.message
@@ -231,7 +264,7 @@ export const ProfileView: React.FC<ProfileViewProps> = memo(({ onNavigateTab }) 
     } finally {
       setLocatingGps(false);
     }
-  }, [locatingGps, t]);
+  }, [dispatch, locatingGps, syncWeatherOnSave, t]);
 
   const handleDiscard = useCallback(() => {
     if (!user) return;
@@ -348,11 +381,15 @@ export const ProfileView: React.FC<ProfileViewProps> = memo(({ onNavigateTab }) 
                 source: 'profile',
               })
             );
+            const nextStationId =
+              (result.user.imdStationId || result.user.cityForecastStationCode || '').trim() ||
+              undefined;
             dispatch(
               fetchWeatherBundle({
                 userId: rawUserId,
                 latitude: form.latitude,
                 longitude: form.longitude,
+                stationId: nextStationId,
                 force: true,
               })
             );
@@ -373,12 +410,16 @@ export const ProfileView: React.FC<ProfileViewProps> = memo(({ onNavigateTab }) 
               ).unwrap();
 
               if (resolved) {
+                const nextStationId =
+                  (result.user.imdStationId || result.user.cityForecastStationCode || '').trim() ||
+                  undefined;
                 dispatch(setWeatherLocation(resolved));
                 dispatch(
                   fetchWeatherBundle({
                     userId: rawUserId,
                     latitude: resolved.latitude,
                     longitude: resolved.longitude,
+                    stationId: nextStationId,
                     force: true,
                   })
                 );

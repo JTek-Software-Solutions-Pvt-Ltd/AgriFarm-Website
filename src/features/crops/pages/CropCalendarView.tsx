@@ -292,7 +292,7 @@ export const CropCalendarView: React.FC<CropCalendarViewProps> = ({
       <div className="w-full bg-[#e8f4ec] border border-[#bcd3c3] rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
         <div className="flex items-start sm:items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-[#113e2e] text-white flex items-center justify-center shrink-0 shadow-xs">
-            <span className="material-symbols-outlined text-lg text-emerald-300">satellite_alt</span>
+            <span className="material-symbols-outlined notranslate text-lg text-emerald-300 select-none" translate="no" aria-hidden="true">satellite_alt</span>
           </div>
           <div>
             <span className="text-[10px] font-bold text-[#113e2e] uppercase tracking-wider block sm:inline mr-2">

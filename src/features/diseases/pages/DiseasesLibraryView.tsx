@@ -143,10 +143,10 @@ export const DiseasesLibraryView: React.FC<DiseasesLibraryViewProps> = ({
       {/* 4 Summary Metrics Ribbon */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-4 rounded-2xl bg-white border border-[#e5ebe7] shadow-xs flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-[#113e2e] flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-2xl text-[#175638]">coronavirus</span>
+          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-[#113e2e] flex items-center justify-center shrink-0 overflow-hidden">
+            <span className="material-symbols-outlined notranslate text-2xl text-[#175638] select-none" translate="no" aria-hidden="true">coronavirus</span>
           </div>
-          <div>
+          <div className="min-w-0">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
               CATALOGED DISEASES
             </span>
@@ -156,10 +156,10 @@ export const DiseasesLibraryView: React.FC<DiseasesLibraryViewProps> = ({
         </div>
 
         <div className="p-4 rounded-2xl bg-white border border-[#e5ebe7] shadow-xs flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-2xl text-red-500">crisis_alert</span>
+          <div className="w-12 h-12 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0 overflow-hidden">
+            <span className="material-symbols-outlined notranslate text-2xl text-red-500 select-none" translate="no" aria-hidden="true">crisis_alert</span>
           </div>
-          <div>
+          <div className="min-w-0">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
               ACTIVE REGIONAL ALERTS
             </span>
@@ -169,10 +169,10 @@ export const DiseasesLibraryView: React.FC<DiseasesLibraryViewProps> = ({
         </div>
 
         <div className="p-4 rounded-2xl bg-white border border-[#e5ebe7] shadow-xs flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-[#113e2e] flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-2xl text-[#175638]">eco</span>
+          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-[#113e2e] flex items-center justify-center shrink-0 overflow-hidden">
+            <span className="material-symbols-outlined notranslate text-2xl text-[#175638] select-none" translate="no" aria-hidden="true">eco</span>
           </div>
-          <div>
+          <div className="min-w-0">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
               VERIFIED REMEDIES
             </span>
@@ -182,10 +182,10 @@ export const DiseasesLibraryView: React.FC<DiseasesLibraryViewProps> = ({
         </div>
 
         <div className="p-4 rounded-2xl bg-white border border-[#e5ebe7] shadow-xs flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-2xl text-amber-700">support_agent</span>
+          <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0 overflow-hidden">
+            <span className="material-symbols-outlined notranslate text-2xl text-amber-700 select-none" translate="no" aria-hidden="true">support_agent</span>
           </div>
-          <div>
+          <div className="min-w-0">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
               ADVISORY HOTLINE
             </span>
