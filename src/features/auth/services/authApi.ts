@@ -304,7 +304,7 @@ export function mapApiUserToProfile(
       : country && country !== 'India'
         ? country
         : USER_PROFILE.location;
-  const stationCity = village || district || (country !== 'India' ? country : 'Guntur');
+  const stationCity = village || district || state || country || 'India';
   const formattedPhone = formatPhoneForDisplay(rawMobile, detectedCountry.iso);
   const nationalDigits = extractNationalDigits(rawMobile, detectedCountry.iso);
 
@@ -326,6 +326,35 @@ export function mapApiUserToProfile(
           ? apiObj.avatar.trim()
           : '';
 
+  const imdDistrictIdRaw = apiObj.imd_district_id ?? apiObj.imdDistrictId;
+  const imdDistrictId =
+    imdDistrictIdRaw !== undefined &&
+    imdDistrictIdRaw !== null &&
+    String(imdDistrictIdRaw).trim() !== ''
+      ? String(imdDistrictIdRaw).trim()
+      : undefined;
+
+  const cityForecastRaw =
+    apiObj.city_forecast_station_code ?? apiObj.cityForecastStationCode;
+  const cityForecastStationCode =
+    cityForecastRaw !== undefined &&
+    cityForecastRaw !== null &&
+    String(cityForecastRaw).trim() !== ''
+      ? String(cityForecastRaw).trim()
+      : undefined;
+
+  const imdStationRaw =
+    apiObj.imd_station_id ??
+    apiObj.imdStationId ??
+    apiObj.current_weather_station_id ??
+    apiObj.station_id;
+  const imdStationId =
+    imdStationRaw !== undefined &&
+    imdStationRaw !== null &&
+    String(imdStationRaw).trim() !== ''
+      ? String(imdStationRaw).trim()
+      : undefined;
+
   return {
     id: `farmer-${rawIdStr}`,
     rawId: rawIdStr,
@@ -344,6 +373,9 @@ export function mapApiUserToProfile(
     cropId,
     ...(primaryCrop ? { primaryCrop } : {}),
     ...(hasCoords ? { latitude: latCandidate, longitude: lngCandidate } : {}),
+    ...(imdDistrictId ? { imdDistrictId } : {}),
+    ...(cityForecastStationCode ? { cityForecastStationCode } : {}),
+    ...(imdStationId ? { imdStationId } : {}),
     station: apiObj.station || `Ag-Weather Station • ${stationCity}`,
     kisanId:
       apiObj.kisanId ||

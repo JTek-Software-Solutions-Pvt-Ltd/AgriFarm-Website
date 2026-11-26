@@ -91,7 +91,61 @@ export function getStoredUser(): UserProfile | null {
     if (!token) return null;
     const raw = localStorage.getItem(USER_STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as UserProfile;
+    const parsed = JSON.parse(raw) as UserProfile & Record<string, unknown>;
+    if (!parsed || typeof parsed !== 'object') return null;
+
+    const rawId =
+      parsed.rawId ||
+      (parsed.user_id !== undefined && parsed.user_id !== null ? String(parsed.user_id).trim() : undefined);
+    const imdDistrictId =
+      parsed.imdDistrictId ||
+      (parsed.imd_district_id !== undefined && parsed.imd_district_id !== null
+        ? String(parsed.imd_district_id).trim() || undefined
+        : undefined);
+    const cityForecastStationCode =
+      parsed.cityForecastStationCode ||
+      (parsed.city_forecast_station_code !== undefined && parsed.city_forecast_station_code !== null
+        ? String(parsed.city_forecast_station_code).trim() || undefined
+        : undefined);
+    const imdStationId =
+      parsed.imdStationId ||
+      (parsed.imd_station_id ?? parsed.current_weather_station_id ?? parsed.station_id
+        ? String(parsed.imd_station_id ?? parsed.current_weather_station_id ?? parsed.station_id).trim() ||
+          undefined
+        : undefined);
+
+    const parsedLat = Number(parsed.latitude);
+    const parsedLng = Number(parsed.longitude);
+    const cropIdRaw = parsed.cropId ?? parsed.crop_id;
+    const parsedCropId = Number(cropIdRaw);
+    const primaryCrop =
+      parsed.primaryCrop ||
+      (typeof parsed.primary_crop === 'string' && parsed.primary_crop.trim()
+        ? parsed.primary_crop.trim()
+        : undefined);
+
+    const actualPlace = parsed.village || parsed.district;
+    let station = typeof parsed.station === 'string' ? parsed.station : '';
+    if (
+      actualPlace &&
+      station.startsWith('Ag-Weather Station • Guntur') &&
+      actualPlace.trim().toLowerCase() !== 'guntur'
+    ) {
+      station = `Ag-Weather Station • ${actualPlace}`;
+    }
+
+    return {
+      ...parsed,
+      ...(rawId ? { rawId } : {}),
+      ...(imdDistrictId ? { imdDistrictId } : {}),
+      ...(cityForecastStationCode ? { cityForecastStationCode } : {}),
+      ...(imdStationId ? { imdStationId } : {}),
+      ...(Number.isFinite(parsedCropId) && parsedCropId > 0 ? { cropId: parsedCropId } : {}),
+      ...(primaryCrop ? { primaryCrop } : {}),
+      ...(Number.isFinite(parsedLat) ? { latitude: parsedLat } : {}),
+      ...(Number.isFinite(parsedLng) ? { longitude: parsedLng } : {}),
+      station,
+    };
   } catch {
     return null;
   }

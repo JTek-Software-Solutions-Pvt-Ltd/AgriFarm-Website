@@ -12,6 +12,7 @@ import { Sidebar } from '../../shared/components/Sidebar';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
   addCalendarTask,
+  openAiChatWithSession,
   setActiveTab,
   setAiChatOpen,
   setCustomTaskModalOpen,
@@ -28,7 +29,7 @@ import {
   selectProfileUi,
 } from '../../features/auth';
 import { LocationModal, WeatherSyncController } from '../../features/weather';
-import { DostAiModal } from '../../features/ai-assistant';
+import { DostAiModal, WelcomePopupModal } from '../../features/ai-assistant';
 import { ScanCropModal } from '../../features/crop-doctor';
 import { CustomTaskModal } from '../../features/crops';
 import { ReportOutbreakModal } from '../../features/diseases';
@@ -41,21 +42,34 @@ const GlobalModals = memo(() => {
   const dispatch = useAppDispatch();
   const { language } = useTranslation();
   const isAiChatOpen = useAppSelector((state) => state.ui.isAiChatOpen);
+  const aiSessionId = useAppSelector((state) => state.ui.aiSessionId);
+  const aiWelcomeMessage = useAppSelector((state) => state.ui.aiWelcomeMessage);
   const isScanModalOpen = useAppSelector((state) => state.ui.isScanModalOpen);
   const isCustomTaskModalOpen = useAppSelector((state) => state.ui.isCustomTaskModalOpen);
   const isReportModalOpen = useAppSelector((state) => state.ui.isReportModalOpen);
+
+  const handleOpenAiChatFromWelcome = useCallback(
+    (sessionId?: string | null, welcomeMessage?: string | null) =>
+      dispatch(openAiChatWithSession({ sessionId, welcomeMessage })),
+    [dispatch]
+  );
 
   return (
     <>
       <DostAiModal
         isOpen={isAiChatOpen}
+        initialSessionId={aiSessionId}
+        welcomeMessage={aiWelcomeMessage}
         onClose={() => dispatch(setAiChatOpen(false))}
+        setActiveTab={(tab) => dispatch(setActiveTab(tab))}
         language={language}
         onOpenScan={() => {
           dispatch(setAiChatOpen(false));
           dispatch(setScanModalOpen(true));
         }}
       />
+
+      <WelcomePopupModal onOpenAiChat={handleOpenAiChatFromWelcome} />
 
       <ScanCropModal
         isOpen={isScanModalOpen}

@@ -192,7 +192,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
       {/* Toast Notification */}
       {orderedToast && (
         <div className="fixed bottom-6 right-6 z-50 bg-[#113E2E] text-white px-5 py-3.5 rounded-2xl shadow-xl flex items-center gap-3 border border-emerald-400/50 animate-bounce">
-          <span className="material-symbols-outlined text-[#E5B54F] text-2xl">check_circle</span>
+          <span className="material-symbols-outlined notranslate text-[#E5B54F] text-2xl select-none" translate="no" aria-hidden="true">check_circle</span>
           <div>
             <p className="font-bold text-sm">Prescription Kit Ordered Successfully!</p>
             <p className="text-xs text-emerald-200">
@@ -243,7 +243,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
           className="px-4 py-3 rounded-2xl bg-[#edf6ef] border border-[#bcd8c4] text-xs text-[#113E2E] flex items-center justify-between gap-3"
         >
           <div className="flex items-center gap-2 font-medium">
-            <span className="material-symbols-outlined text-base text-emerald-700">check_circle</span>
+            <span className="material-symbols-outlined notranslate text-base text-emerald-700 select-none" translate="no" aria-hidden="true">check_circle</span>
             <span>{actionNotice}</span>
           </div>
           <button
@@ -260,7 +260,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
       <div className="p-4 rounded-xl bg-red-50 text-red-950 border border-red-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0 shadow-xs">
-            <span className="material-symbols-outlined text-[22px]">warning</span>
+            <span className="material-symbols-outlined notranslate text-[22px] select-none" translate="no" aria-hidden="true">warning</span>
           </div>
           <div>
             <p className="font-bold text-sm text-red-900">High Pest Alert: Spodoptera litura (Armyworm) detected in 25km radius</p>
@@ -284,7 +284,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-2 pb-4">
               <div>
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100/90 text-[#113E2E] border border-emerald-300 mb-2 text-[11px] font-bold shadow-xs tracking-wider">
-                  <span className="material-symbols-outlined text-[15px] animate-pulse text-[#1B6F49]">electric_bolt</span>
+                  <span className="material-symbols-outlined notranslate text-[15px] animate-pulse text-[#1B6F49] select-none" translate="no" aria-hidden="true">electric_bolt</span>
                   <span>{t('doctor.badge')}</span>
                   <span className="w-1.5 h-1.5 rounded-full bg-[#3FB968] animate-pulse"></span>
                 </div>
@@ -308,7 +308,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
                 <div className="relative flex items-center justify-center">
                   <span className="absolute w-20 h-20 rounded-full bg-emerald-400/20 animate-ping"></span>
                   <div className="w-16 h-16 rounded-2xl bg-[#113E2E] group-hover:scale-110 transition-transform flex items-center justify-center text-white shadow-md ring-4 ring-emerald-600/30">
-                    <span className="material-symbols-outlined text-[36px] text-[#90d6ab]">photo_camera</span>
+                    <span className="material-symbols-outlined notranslate text-[36px] text-[#90d6ab] select-none" translate="no" aria-hidden="true">photo_camera</span>
                   </div>
                 </div>
                 <div>
@@ -319,19 +319,19 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
                 </div>
                 <div className="pt-1">
                   <span className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#113E2E] hover:bg-[#0a291f] text-white text-sm font-semibold shadow-md transition-all group-hover:shadow-lg">
-                    <span className="material-symbols-outlined text-[18px] text-emerald-300">upload_file</span>
+                    <span className="material-symbols-outlined notranslate text-[18px] text-emerald-300 select-none" translate="no" aria-hidden="true">upload_file</span>
                     <span>{t('doctor.browseFiles')}</span>
                   </span>
                 </div>
                 <div className="flex flex-wrap justify-center items-center gap-2 pt-2">
                   <span className="inline-flex items-center gap-1 text-xs px-3 py-1 rounded-full bg-white text-[#113E2E] border border-emerald-200/60 shadow-xs font-semibold">
-                    <span className="material-symbols-outlined text-[14px] text-emerald-600">check_circle</span> Macro focus
+                    <span className="material-symbols-outlined notranslate text-[14px] text-emerald-600 select-none" translate="no" aria-hidden="true">check_circle</span> Macro focus
                   </span>
                   <span className="inline-flex items-center gap-1 text-xs px-3 py-1 rounded-full bg-white text-[#113E2E] border border-emerald-200/60 shadow-xs font-semibold">
-                    <span className="material-symbols-outlined text-[14px] text-emerald-600">check_circle</span> Good daylight
+                    <span className="material-symbols-outlined notranslate text-[14px] text-emerald-600 select-none" translate="no" aria-hidden="true">check_circle</span> Good daylight
                   </span>
                   <span className="inline-flex items-center gap-1 text-xs px-3 py-1 rounded-full bg-white text-[#113E2E] border border-emerald-200/60 shadow-xs font-semibold">
-                    <span className="material-symbols-outlined text-[14px] text-emerald-600">check_circle</span> Sharp margins
+                    <span className="material-symbols-outlined notranslate text-[14px] text-emerald-600 select-none" translate="no" aria-hidden="true">check_circle</span> Sharp margins
                   </span>
                 </div>
               </div>
@@ -345,7 +345,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
               className="flex items-center justify-center gap-2.5 p-3 rounded-xl bg-[#F8FAF7] text-slate-800 hover:bg-white hover:border-emerald-300 border border-[#D5E1D2] transition-all text-xs font-semibold shadow-xs group"
             >
               <span className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center text-[#113E2E] group-hover:scale-105 transition-transform">
-                <span className="material-symbols-outlined text-[18px]">videocam</span>
+                <span className="material-symbols-outlined notranslate text-[18px] select-none" translate="no" aria-hidden="true">videocam</span>
               </span>
               <span>{t('doctor.liveCamera')}</span>
             </button>
@@ -354,7 +354,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
               className="flex items-center justify-center gap-2.5 p-3 rounded-xl bg-[#F8FAF7] text-slate-800 hover:bg-white hover:border-emerald-300 border border-[#D5E1D2] transition-all text-xs font-semibold shadow-xs group"
             >
               <span className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center text-[#25D366] group-hover:scale-105 transition-transform">
-                <span className="material-symbols-outlined text-[18px]">chat</span>
+                <span className="material-symbols-outlined notranslate text-[18px] select-none" translate="no" aria-hidden="true">chat</span>
               </span>
               <span>{t('doctor.whatsappBot')}</span>
             </button>
@@ -363,7 +363,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
               className="flex items-center justify-center gap-2.5 p-3 rounded-xl bg-[#F8FAF7] text-slate-800 hover:bg-white hover:border-emerald-300 border border-[#D5E1D2] transition-all text-xs font-semibold shadow-xs group"
             >
               <span className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center text-amber-800 group-hover:scale-105 transition-transform">
-                <span className="material-symbols-outlined text-[18px]">photo_library</span>
+                <span className="material-symbols-outlined notranslate text-[18px] select-none" translate="no" aria-hidden="true">photo_library</span>
               </span>
               <span>{t('doctor.gallery')}</span>
             </button>
@@ -405,7 +405,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
                       </div>
                       <p className="text-[11px] text-slate-500 truncate">{sample.category}</p>
                     </div>
-                    <span className={`material-symbols-outlined text-[20px] ${isSelected ? 'text-emerald-700' : 'text-slate-400 group-hover:text-emerald-700'}`}>
+                    <span className={`material-symbols-outlined notranslate text-[20px] select-none ${isSelected ? 'text-emerald-700' : 'text-slate-400 group-hover:text-emerald-700'}`} translate="no" aria-hidden="true">
                       {isSelected ? 'check' : 'chevron_right'}
                     </span>
                   </button>
@@ -416,7 +416,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
 
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-slate-500 text-xs">
             <span>Auto-calibration via GPS: {location.label}</span>
-            <span className="material-symbols-outlined text-[18px] text-emerald-700">my_location</span>
+            <span className="material-symbols-outlined notranslate text-[18px] text-emerald-700 select-none" translate="no" aria-hidden="true">my_location</span>
           </div>
         </div>
       </div>
@@ -459,7 +459,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
               }
               className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-2 transition-colors"
             >
-              <span className="material-symbols-outlined text-[18px]">share</span>
+              <span className="material-symbols-outlined notranslate text-[18px] select-none" translate="no" aria-hidden="true">share</span>
               <span>Share with Field Officer</span>
             </button>
             <button
@@ -468,7 +468,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
               }
               className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-2 transition-colors"
             >
-              <span className="material-symbols-outlined text-[18px]">download</span>
+              <span className="material-symbols-outlined notranslate text-[18px] select-none" translate="no" aria-hidden="true">download</span>
               <span>Export Prescription (PDF)</span>
             </button>
           </div>
@@ -496,14 +496,14 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
                   <span className="font-bold tracking-wide">Active Scan Analyzed</span>
                 </div>
                 <div className="px-2.5 py-0.5 rounded-full bg-emerald-600 text-white text-[11px] font-bold flex items-center gap-1 shadow-sm w-fit">
-                  <span className="material-symbols-outlined text-[13px]">auto_awesome</span>
+                  <span className="material-symbols-outlined notranslate text-[13px] select-none" translate="no" aria-hidden="true">auto_awesome</span>
                   <span>{selectedCase.confidence}% Match Confidence</span>
                 </div>
               </div>
 
               {/* Severity Badge */}
               <div className="absolute bottom-3 right-3 px-3 py-1.5 rounded-xl bg-amber-500 text-white text-xs font-bold shadow-md border border-amber-300 flex items-center gap-1.5 z-10">
-                <span className="material-symbols-outlined text-[16px]">warning</span>
+                <span className="material-symbols-outlined notranslate text-[16px] select-none" translate="no" aria-hidden="true">warning</span>
                 <span>Severity: {selectedCase.severityStage}</span>
               </div>
             </div>
@@ -531,7 +531,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
             {/* Environmental Context Tile */}
             <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200/80 flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-[#113E2E] shrink-0">
-                <span className="material-symbols-outlined text-[20px]">air</span>
+                <span className="material-symbols-outlined notranslate text-[20px] select-none" translate="no" aria-hidden="true">air</span>
               </div>
               <div className="text-left">
                 <p className="text-xs font-bold text-[#113E2E]">Current Weather Advisory ({activeDistrict})</p>
@@ -568,7 +568,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
                     </p>
                   </div>
                   <div className="mt-4 pt-3 border-t border-slate-200/60 flex items-center gap-2 text-slate-600 text-xs">
-                    <span className="material-symbols-outlined text-[16px] text-emerald-600">verified</span>
+                    <span className="material-symbols-outlined notranslate text-[16px] text-emerald-600 select-none" translate="no" aria-hidden="true">verified</span>
                     <span>{selectedCase.chemicalRx.tag}</span>
                   </div>
                 </div>
@@ -588,7 +588,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
                     </p>
                   </div>
                   <div className="mt-4 pt-3 border-t border-slate-200/60 flex items-center gap-2 text-slate-600 text-xs">
-                    <span className="material-symbols-outlined text-[16px] text-emerald-600">eco</span>
+                    <span className="material-symbols-outlined notranslate text-[16px] text-emerald-600 select-none" translate="no" aria-hidden="true">eco</span>
                     <span>{selectedCase.organicRx.tag}</span>
                   </div>
                 </div>
@@ -651,14 +651,14 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
                 onClick={handleOrderKit}
                 className="flex-1 px-6 py-3.5 rounded-xl bg-[#113E2E] text-white hover:bg-[#0d3328] transition-all text-sm font-bold flex items-center justify-center gap-2 shadow-sm"
               >
-                <span className="material-symbols-outlined text-[20px] text-[#E5B54F]">shopping_bag</span>
+                <span className="material-symbols-outlined notranslate text-[20px] text-[#E5B54F] select-none" translate="no" aria-hidden="true">shopping_bag</span>
                 <span>{t('doctor.orderKitBtn')} (₹{costReq.toLocaleString('en-IN')})</span>
               </button>
               <button
                 onClick={() => setConsultModalOpen(true)}
                 className="px-6 py-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-[#113E2E] text-sm font-bold flex items-center justify-center gap-2 transition-colors border border-slate-200"
               >
-                <span className="material-symbols-outlined text-[#113E2E] text-[20px]">support_agent</span>
+                <span className="material-symbols-outlined notranslate text-[#113E2E] text-[20px] select-none" translate="no" aria-hidden="true">support_agent</span>
                 <span>{t('doctor.consultBtn')}</span>
               </button>
             </div>
@@ -710,7 +710,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
                         <span className="inline-block px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">Moderate</span>
                         <p className="text-xs text-emerald-700 font-bold">85% Recovered</p>
                       </div>
-                      <span className="material-symbols-outlined text-slate-400 text-[20px]">chevron_right</span>
+                      <span className="material-symbols-outlined notranslate text-slate-400 text-[20px] select-none" translate="no" aria-hidden="true">chevron_right</span>
                     </div>
                   </div>
 
@@ -732,7 +732,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
                         <span className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">Resolved</span>
                         <p className="text-xs text-emerald-700 font-bold">100% Healthy</p>
                       </div>
-                      <span className="material-symbols-outlined text-slate-400 text-[20px]">chevron_right</span>
+                      <span className="material-symbols-outlined notranslate text-slate-400 text-[20px] select-none" translate="no" aria-hidden="true">chevron_right</span>
                     </div>
                   </div>
 
@@ -754,7 +754,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
                         <span className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">Resolved</span>
                         <p className="text-xs text-emerald-700 font-bold">Healthy Green</p>
                       </div>
-                      <span className="material-symbols-outlined text-slate-400 text-[20px]">chevron_right</span>
+                      <span className="material-symbols-outlined notranslate text-slate-400 text-[20px] select-none" translate="no" aria-hidden="true">chevron_right</span>
                     </div>
                   </div>
 
@@ -776,7 +776,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
                         <span className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">Resolved</span>
                         <p className="text-xs text-emerald-700 font-bold">Stable yield</p>
                       </div>
-                      <span className="material-symbols-outlined text-slate-400 text-[20px]">chevron_right</span>
+                      <span className="material-symbols-outlined notranslate text-slate-400 text-[20px] select-none" translate="no" aria-hidden="true">chevron_right</span>
                     </div>
                   </div>
                 </div>
@@ -785,7 +785,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
               {/* Historical Recovery Progress Sparkline Graphic */}
               <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between text-slate-600 text-xs">
                 <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[#113E2E] text-[20px]">timeline</span>
+                  <span className="material-symbols-outlined notranslate text-[#113E2E] text-[20px] select-none" translate="no" aria-hidden="true">timeline</span>
                   <span>Average farm healing turnaround: <strong className="text-slate-900">4.2 days</strong></span>
                 </div>
                 <span className="text-emerald-700 font-bold">↑ 38% faster than regional avg</span>
@@ -794,7 +794,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
           ) : (
             <div className="h-full min-h-[300px] rounded-2xl bg-[#F8FAF7] border border-[#E7EFE7] p-8 flex flex-col items-center justify-center text-center gap-4">
               <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-[#113E2E] flex items-center justify-center">
-                <span className="material-symbols-outlined text-2xl">lock</span>
+                <span className="material-symbols-outlined notranslate text-2xl select-none" translate="no" aria-hidden="true">lock</span>
               </div>
               <div className="space-y-1.5 max-w-sm">
                 <h2 className="font-bold text-base text-[#113E2E]">{t('auth.signInToViewHistory')}</h2>
@@ -902,7 +902,7 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
               className="w-full py-2.5 rounded-xl bg-slate-100 text-slate-800 text-xs font-bold hover:bg-slate-200 transition-colors flex items-center justify-center gap-1.5"
             >
               <span>Explore 14-Day Microclimate Pest Risk Map</span>
-              <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+              <span className="material-symbols-outlined notranslate text-[18px] select-none" translate="no" aria-hidden="true">arrow_forward</span>
             </button>
           </div>
         </div>
@@ -934,14 +934,14 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
             onClick={() => setConsultModalOpen(true)}
             className="flex-1 md:flex-initial px-5 py-2.5 rounded-xl bg-[#113E2E] text-white hover:bg-[#0a291f] text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-colors"
           >
-            <span className="material-symbols-outlined text-[18px] text-[#E5B54F]">video_call</span>
+            <span className="material-symbols-outlined notranslate text-[18px] text-[#E5B54F] select-none" translate="no" aria-hidden="true">video_call</span>
             <span>Request Instant 1-on-1 Call</span>
           </button>
           <button
             onClick={onOpenDostAi}
             className="flex-1 md:flex-initial px-5 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-[#113E2E] text-xs font-bold flex items-center justify-center gap-2 border border-emerald-300 shadow-xs transition-colors"
           >
-            <span className="material-symbols-outlined text-[18px]">chat</span>
+            <span className="material-symbols-outlined notranslate text-[18px] select-none" translate="no" aria-hidden="true">chat</span>
             <span>Ask Dost AI First</span>
           </button>
         </div>
@@ -953,11 +953,11 @@ export const CropDoctorView: React.FC<CropDoctorViewProps> = ({
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-emerald-700 text-2xl">support_agent</span>
+                <span className="material-symbols-outlined notranslate text-emerald-700 text-2xl select-none" translate="no" aria-hidden="true">support_agent</span>
                 <h3 className="font-bold text-base text-[#113E2E]">KVK Agronomist Consultation</h3>
               </div>
               <button onClick={() => setConsultModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <span className="material-symbols-outlined">close</span>
+                <span className="material-symbols-outlined notranslate select-none" translate="no" aria-hidden="true">close</span>
               </button>
             </div>
             <div className="space-y-3 text-xs text-slate-600">

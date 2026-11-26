@@ -22,6 +22,7 @@ export {
   selectProfileUi,
   sendOtp,
   setAuthStep,
+  syncProfileWithLocation,
   updateUserProfile,
   verifyOtp,
 } from './store/authSlice';

@@ -13,9 +13,9 @@ import {
   WeatherMeta,
 } from '../../../shared/types';
 import {
-  AI_API_BASE_URL,
   API_BASE_URL,
   DEFAULT_API_HEADERS,
+  getAiApiBaseUrl,
 } from '../../../shared/config/api';
 
 export const WEATHER_ENDPOINTS = {
@@ -53,6 +53,7 @@ export const QUICK_AG_HUBS: WeatherLocation[] = [
     latitude: 17.385,
     longitude: 78.4867,
     label: 'Hyderabad, Telangana',
+    country: 'India',
     state: 'Telangana',
     district: 'Hyderabad',
     village: 'Hyderabad',
@@ -63,6 +64,7 @@ export const QUICK_AG_HUBS: WeatherLocation[] = [
     latitude: 16.3067,
     longitude: 80.4365,
     label: 'Guntur, Andhra Pradesh',
+    country: 'India',
     state: 'Andhra Pradesh',
     district: 'Guntur',
     village: 'Guntur',
@@ -73,6 +75,7 @@ export const QUICK_AG_HUBS: WeatherLocation[] = [
     latitude: 16.5062,
     longitude: 80.648,
     label: 'Vijayawada, Andhra Pradesh',
+    country: 'India',
     state: 'Andhra Pradesh',
     district: 'NTR',
     village: 'Vijayawada',
@@ -83,6 +86,7 @@ export const QUICK_AG_HUBS: WeatherLocation[] = [
     latitude: 17.9689,
     longitude: 79.5941,
     label: 'Warangal, Telangana',
+    country: 'India',
     state: 'Telangana',
     district: 'Warangal',
     village: 'Warangal',
@@ -93,6 +97,7 @@ export const QUICK_AG_HUBS: WeatherLocation[] = [
     latitude: 18.4386,
     longitude: 79.1288,
     label: 'Karimnagar, Telangana',
+    country: 'India',
     state: 'Telangana',
     district: 'Karimnagar',
     village: 'Karimnagar',
@@ -103,6 +108,7 @@ export const QUICK_AG_HUBS: WeatherLocation[] = [
     latitude: 17.6868,
     longitude: 83.2185,
     label: 'Visakhapatnam, Andhra Pradesh',
+    country: 'India',
     state: 'Andhra Pradesh',
     district: 'Visakhapatnam',
     village: 'Visakhapatnam',
@@ -428,6 +434,7 @@ export async function searchLocationsByQuery(query: string): Promise<WeatherLoca
         latitude: Number(lat.toFixed(4)),
         longitude: Number(lon.toFixed(4)),
         label,
+        country: typeof addr.country === 'string' && addr.country.trim() ? addr.country.trim() : undefined,
         state: state || undefined,
         district: district || undefined,
         village: village || undefined,
@@ -612,28 +619,22 @@ export async function fetchWeatherAdvisoryApi(
   payload: WeatherAdvisoryRequest,
   signal?: AbortSignal
 ): Promise<WeatherAdvisoryResponse> {
-  const path = WEATHER_ENDPOINTS.ADVISORY;
-  const primaryUrl = `${AI_API_BASE_URL}${path}`;
-  const requestInit: RequestInit = {
-    method: 'POST',
-    headers: DEFAULT_API_HEADERS,
-    body: JSON.stringify(payload),
-    signal,
-  };
+  const requestUrl = `${getAiApiBaseUrl()}${WEATHER_ENDPOINTS.ADVISORY}`;
 
   let res: Response;
   try {
-    res = await fetch(primaryUrl, requestInit);
-    // If served from a static host without /ai proxy rules, attempt direct upstream URL
-    if (res.status === 404 && !AI_API_BASE_URL) {
-      res = await fetch(`http://20.12.240.74${path}`, requestInit);
-    }
+    res = await fetch(requestUrl, {
+      method: 'POST',
+      headers: DEFAULT_API_HEADERS,
+      body: JSON.stringify(payload),
+      signal,
+    });
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
       throw err;
     }
     throw new Error(
-      'Unable to reach the AI Weather Advisory endpoint. When running locally, start the app with "npm run dev" (server.ts / Vite proxy) because http://20.12.240.74/ai rejects direct browser CORS requests.'
+      'Unable to reach the AI Weather Advisory endpoint (http://20.12.240.74/ai/api/v1/weather/advisory).'
     );
   }
 

@@ -170,7 +170,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
               onClick={markAllAsRead}
               className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors flex items-center gap-1.5"
             >
-              <span className="material-symbols-outlined text-[18px]">done_all</span>
+              <span className="material-symbols-outlined notranslate text-[18px] select-none" translate="no" aria-hidden="true">done_all</span>
               <span>{t('notif.markAllRead')}</span>
             </button>
           )}
@@ -178,7 +178,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
             onClick={onOpenReportModal}
             className="px-4 py-2 rounded-xl bg-[#113E2E] text-white hover:bg-[#0a291f] text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs"
           >
-            <span className="material-symbols-outlined text-[18px] text-[#E5B54F]">report_problem</span>
+            <span className="material-symbols-outlined notranslate text-[18px] text-[#E5B54F] select-none" translate="no" aria-hidden="true">report_problem</span>
             <span>{t('notif.reportOutbreak')}</span>
           </button>
         </div>
@@ -217,7 +217,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
                 : 'bg-white border border-[#DFEBDE] text-slate-700 hover:bg-slate-50'
             }`}
           >
-            <span className="material-symbols-outlined text-sm text-sky-600">thunderstorm</span>
+            <span className="material-symbols-outlined notranslate text-sm text-sky-600 select-none" translate="no" aria-hidden="true">thunderstorm</span>
             <span>{t('notif.weatherFilter')}</span>
           </button>
           <button
@@ -228,7 +228,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
                 : 'bg-white border border-[#DFEBDE] text-slate-700 hover:bg-slate-50'
             }`}
           >
-            <span className="material-symbols-outlined text-sm text-emerald-600">spa</span>
+            <span className="material-symbols-outlined notranslate text-sm text-emerald-600 select-none" translate="no" aria-hidden="true">spa</span>
             <span>{t('notif.cropsFilter')}</span>
           </button>
           <button
@@ -239,7 +239,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
                 : 'bg-white border border-[#DFEBDE] text-slate-700 hover:bg-slate-50'
             }`}
           >
-            <span className="material-symbols-outlined text-sm text-amber-600">trending_up</span>
+            <span className="material-symbols-outlined notranslate text-sm text-amber-600 select-none" translate="no" aria-hidden="true">trending_up</span>
             <span>{t('notif.mandiFilter')}</span>
           </button>
           <button
@@ -250,14 +250,14 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
                 : 'bg-white border border-[#DFEBDE] text-slate-700 hover:bg-slate-50'
             }`}
           >
-            <span className="material-symbols-outlined text-sm text-blue-600">account_balance</span>
+            <span className="material-symbols-outlined notranslate text-sm text-blue-600 select-none" translate="no" aria-hidden="true">account_balance</span>
             <span>{t('notif.govtFilter')}</span>
           </button>
         </div>
 
         {/* Quick Search */}
         <div className="relative w-full lg:w-80 shrink-0">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+          <span className="material-symbols-outlined notranslate absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg select-none" translate="no" aria-hidden="true">search</span>
           <input
             type="text"
             value={searchQuery}
@@ -327,7 +327,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
                       type === 'govt' ? 'bg-blue-100 text-blue-700' :
                       'bg-emerald-100 text-[#113E2E]'
                     }`}>
-                      <span className="material-symbols-outlined text-2xl">
+                      <span className="material-symbols-outlined notranslate text-2xl select-none" translate="no" aria-hidden="true">
                         {type === 'weather' ? 'thunderstorm' :
                          type === 'mandi' ? 'trending_up' :
                          type === 'govt' ? 'account_balance' : 'warning'}
@@ -353,7 +353,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
                       {type === 'weather' && (
                         <div className="mt-2.5 p-2.5 rounded-lg bg-[#F8FAF7] border border-[#E7EFE7] flex items-center justify-between gap-3 flex-wrap">
                           <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-emerald-700 text-base">air</span>
+                            <span className="material-symbols-outlined notranslate text-emerald-700 text-base select-none" translate="no" aria-hidden="true">air</span>
                             <span className="text-xs text-slate-700 font-bold tabular-nums notranslate" translate="no">
                               Gust Velocity: {liveGusts} km/h
                             </span>
@@ -436,7 +436,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
                       type === 'mandi' ? 'bg-amber-100 text-amber-700' :
                       'bg-slate-100 text-slate-600'
                     }`}>
-                      <span className="material-symbols-outlined text-2xl">
+                      <span className="material-symbols-outlined notranslate text-2xl select-none" translate="no" aria-hidden="true">
                         {type === 'govt' ? 'account_balance' :
                          type === 'mandi' ? 'payments' : 'info'}
                       </span>
@@ -487,7 +487,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
 
           {filteredItems.length === 0 && (
             <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200 p-8">
-              <span className="material-symbols-outlined text-slate-300 text-5xl">notifications_off</span>
+              <span className="material-symbols-outlined notranslate text-slate-300 text-5xl select-none" translate="no" aria-hidden="true">notifications_off</span>
               <p className="font-bold text-slate-700 text-base mt-2">No alerts match your filter</p>
               <p className="text-xs text-slate-400 mt-1">All clear across your parcels and market tickers.</p>
               <button
@@ -506,7 +506,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#DFEBDE]">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-emerald-700 text-xl">tune</span>
+                <span className="material-symbols-outlined notranslate text-emerald-700 text-xl select-none" translate="no" aria-hidden="true">tune</span>
                 <h3 className="font-bold text-sm text-slate-900">Alert Delivery Channels</h3>
               </div>
               <span className="text-[10px] font-bold text-slate-400 uppercase">Preferences</span>
@@ -586,7 +586,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
           {/* Critical Farm Contacts Dock */}
           <div className="bg-[#F8FAF7] rounded-2xl p-6 border border-[#DFEBDE]">
             <div className="flex items-center gap-2 pb-3 border-b border-slate-200/60">
-              <span className="material-symbols-outlined text-amber-600 text-xl">contact_phone</span>
+              <span className="material-symbols-outlined notranslate text-amber-600 text-xl select-none" translate="no" aria-hidden="true">contact_phone</span>
               <h3 className="font-bold text-sm text-slate-900">24x7 Kisan Helplines</h3>
             </div>
 
@@ -614,7 +614,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
               onClick={onOpenScanModal}
               className="mt-4 w-full py-2.5 rounded-xl bg-[#113E2E] text-white text-xs font-bold hover:bg-[#0a291f] transition-colors flex items-center justify-center gap-1.5 shadow-xs"
             >
-              <span className="material-symbols-outlined text-base text-[#E5B54F]">document_scanner</span>
+              <span className="material-symbols-outlined notranslate text-base text-[#E5B54F] select-none" translate="no" aria-hidden="true">document_scanner</span>
               <span>Launch Quick Camera Scan</span>
             </button>
           </div>

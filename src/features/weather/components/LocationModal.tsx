@@ -20,6 +20,7 @@ import {
   selectWeatherLocation,
   setWeatherLocation,
 } from '../store/weatherSlice';
+import { syncProfileWithLocation } from '../../auth/store/authSlice';
 import { detectCurrentAddress } from '../../../shared/services/geolocation';
 import {
   formatCoords,
@@ -62,6 +63,7 @@ export const LocationModal: React.FC = memo(() => {
   const handleSelectLocation = useCallback(
     (loc: WeatherLocation) => {
       dispatch(setWeatherLocation(loc));
+      dispatch(syncProfileWithLocation(loc));
       dispatch(closeLocationModal());
     },
     [dispatch]
@@ -77,6 +79,7 @@ export const LocationModal: React.FC = memo(() => {
         latitude: detected.latitude,
         longitude: detected.longitude,
         label: detected.label || `${detected.latitude.toFixed(4)}, ${detected.longitude.toFixed(4)}`,
+        country: detected.country || undefined,
         state: detected.state || undefined,
         district: detected.district || undefined,
         village: detected.village || undefined,
@@ -120,6 +123,7 @@ export const LocationModal: React.FC = memo(() => {
                 latitude: Number(lat.toFixed(4)),
                 longitude: Number(lng.toFixed(4)),
                 label: rev.label,
+                country: rev.country || undefined,
                 state: rev.state || undefined,
                 district: rev.district || undefined,
                 village: rev.village || undefined,

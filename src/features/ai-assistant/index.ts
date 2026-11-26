@@ -4,3 +4,4 @@
  */
 
 export { DostAiModal } from './components/DostAiModal';
+export { WelcomePopupModal } from './components/WelcomePopupModal';

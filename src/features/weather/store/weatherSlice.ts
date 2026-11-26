@@ -8,6 +8,11 @@ import {
   CurrentWeatherData,
   DailyForecastItem,
   HourlyForecastItem,
+  ImdCurrentObservation,
+  ImdDistrictRainfall,
+  ImdDistrictWarning,
+  ImdForecastObservation,
+  ImdWeatherErrors,
   WeatherAdvisoryResponse,
   WeatherLocation,
   WeatherMeta,
@@ -24,10 +29,20 @@ import {
   getStoredWeatherLocation,
   saveWeatherLocationStorage,
 } from '../services/weatherApi';
-import { getStoredUser } from '../../auth/utils/jwt';
-import { registerUser, verifyOtp } from '../../auth/store/authSlice';
+import {
+  fetchImdCurrentApi,
+  fetchImdForecastApi,
+  fetchImdRainfallApi,
+  fetchImdWarningsApi,
+  normalizeImdCurrentToWeatherData,
+  normalizeImdForecastToDailyItems,
+  pickBestImdCurrentStation,
+} from '../services/imdWeatherApi';
+import { getStoredJwt, getStoredUser } from '../../auth/utils/jwt';
+import { fetchUserProfile, logout, registerUser, verifyOtp } from '../../auth/store/authSlice';
 
 const WEATHER_CACHE_TTL_MS = 5 * 60 * 1000;
+const IMD_CACHE_TTL_MS = 10 * 60 * 1000;
 
 export interface WeatherState {
   location: WeatherLocation;
@@ -50,6 +65,24 @@ export interface WeatherState {
   lastAdvisoryKey: string | null;
   inFlightAdvisoryKey: string | null;
   lastAdvisoryFetchedAt: number;
+  imdCurrentStations: ImdCurrentObservation[];
+  imdCurrent: ImdCurrentObservation | null;
+  imdCurrentStationId: string | null;
+  imdForecast: ImdForecastObservation | null;
+  imdForecastStationId: string | null;
+  imdWarnings: ImdDistrictWarning | null;
+  imdDistrictId: string | null;
+  imdRainfall: ImdDistrictRainfall | null;
+  imdLoading: boolean;
+  imdError: string | null;
+  imdSectionErrors: ImdWeatherErrors;
+  imdLastFetchedKey: string | null;
+  imdInFlightKey: string | null;
+  imdLastFetchedAt: number;
+  weatherSource: {
+    current: 'IMD' | 'FALLBACK' | null;
+    forecast: 'IMD' | 'FALLBACK' | null;
+  };
 }
 
 function normalizeOptionalUserId(userId?: string): string | undefined {
@@ -67,9 +100,11 @@ function normalizeAdvisoryUserId(userId?: string): number {
 export function buildWeatherFetchKey(
   userId: string | undefined,
   latitude: number,
-  longitude: number
+  longitude: number,
+  stationId?: string
 ): string {
-  return `${normalizeOptionalUserId(userId) || 'guest'}|${latitude.toFixed(4)}|${longitude.toFixed(4)}`;
+  const st = (stationId || '').trim();
+  return `${normalizeOptionalUserId(userId) || 'guest'}|${latitude.toFixed(4)}|${longitude.toFixed(4)}|${st}`;
 }
 
 export function buildAdvisoryFetchKey(params: {
@@ -89,7 +124,7 @@ export function buildAdvisoryFetchKey(params: {
 
 function getInitialLocation(): WeatherLocation {
   const storedLoc = getStoredWeatherLocation();
-  if (storedLoc) return storedLoc;
+  if (storedLoc && storedLoc.source !== 'default') return storedLoc;
 
   const storedUser = getStoredUser();
   if (storedUser) {
@@ -111,6 +146,7 @@ function getInitialLocation(): WeatherLocation {
         latitude: storedUser.latitude,
         longitude: storedUser.longitude,
         label,
+        country: storedUser.country,
         state: storedUser.state,
         district: storedUser.district,
         village: storedUser.village,
@@ -120,8 +156,9 @@ function getInitialLocation(): WeatherLocation {
     }
     if (storedUser.village || storedUser.district || storedUser.state) {
       return {
-        ...DEFAULT_WEATHER_LOCATION,
+        ...(storedLoc || DEFAULT_WEATHER_LOCATION),
         label,
+        country: storedUser.country,
         state: storedUser.state,
         district: storedUser.district,
         village: storedUser.village,
@@ -131,7 +168,7 @@ function getInitialLocation(): WeatherLocation {
     }
   }
 
-  return DEFAULT_WEATHER_LOCATION;
+  return storedLoc || DEFAULT_WEATHER_LOCATION;
 }
 
 const initialState: WeatherState = {
@@ -155,12 +192,31 @@ const initialState: WeatherState = {
   lastAdvisoryKey: null,
   inFlightAdvisoryKey: null,
   lastAdvisoryFetchedAt: 0,
+  imdCurrentStations: [],
+  imdCurrent: null,
+  imdCurrentStationId: null,
+  imdForecast: null,
+  imdForecastStationId: null,
+  imdWarnings: null,
+  imdDistrictId: null,
+  imdRainfall: null,
+  imdLoading: false,
+  imdError: null,
+  imdSectionErrors: {},
+  imdLastFetchedKey: null,
+  imdInFlightKey: null,
+  imdLastFetchedAt: 0,
+  weatherSource: {
+    current: null,
+    forecast: null,
+  },
 };
 
 interface FetchWeatherArgs {
   userId?: string;
   latitude: number;
   longitude: number;
+  stationId?: string;
   force?: boolean;
 }
 
@@ -170,11 +226,22 @@ interface FetchWeatherResult {
   forecast: DailyForecastItem[];
   hourly: HourlyForecastItem[];
   meta: WeatherMeta;
+  weatherSource: {
+    current: 'IMD' | 'FALLBACK';
+    forecast: 'IMD' | 'FALLBACK';
+  };
+  imdCurrentStations: ImdCurrentObservation[];
+  imdCurrent: ImdCurrentObservation | null;
+  imdCurrentStationId: string | null;
+  imdForecast: ImdForecastObservation | null;
+  imdForecastStationId: string | null;
+  imdStationErrors: Pick<ImdWeatherErrors, 'current' | 'forecast'>;
 }
 
 /**
- * Fetches current weather, 7-day forecast, and 24-hour hourly forecast in parallel.
- * Built-in condition guard prevents duplicate network calls when views mount/switch.
+ * Fetches weather telemetry using IMD station APIs first (when JWT + profile station_id exist),
+ * then falls back independently per-endpoint to /api/weather/current and /api/weather/forecast
+ * whenever IMD is unavailable or returns incomplete data.
  */
 export const fetchWeatherBundle = createAsyncThunk<
   FetchWeatherResult,
@@ -182,23 +249,199 @@ export const fetchWeatherBundle = createAsyncThunk<
   { state: { weather: WeatherState }; rejectValue: string }
 >(
   'weather/fetchBundle',
-  async ({ userId, latitude, longitude }, { rejectWithValue, signal }) => {
+  async ({ userId, latitude, longitude, stationId }, { getState, rejectWithValue, signal }) => {
     const effectiveUserId = normalizeOptionalUserId(userId);
-    const key = buildWeatherFetchKey(effectiveUserId, latitude, longitude);
+    const cleanStationId = (stationId || '').trim() || undefined;
+    const hasJwt = Boolean(getStoredJwt());
+    const key = buildWeatherFetchKey(effectiveUserId, latitude, longitude, cleanStationId);
+    const loc = getState().weather.location;
 
     try {
-      const [currentRes, forecastRes, hourlyRes] = await Promise.all([
-        fetchCurrentWeatherApi(effectiveUserId, latitude, longitude, signal),
-        fetchForecastWeatherApi(effectiveUserId, latitude, longitude, 7, signal),
-        fetchHourlyWeatherApi(effectiveUserId, latitude, longitude, signal),
+      // Start hourly fetch alongside primary weather lookup (IMD has no hourly endpoint)
+      const hourlyPromise = fetchHourlyWeatherApi(effectiveUserId, latitude, longitude, signal);
+
+      let imdCurrentStations: ImdCurrentObservation[] = [];
+      let imdCurrent: ImdCurrentObservation | null = null;
+      let imdCurrentStationId: string | null = null;
+      let imdForecast: ImdForecastObservation | null = null;
+      let imdForecastStationId: string | null = null;
+      const imdStationErrors: Pick<ImdWeatherErrors, 'current' | 'forecast'> = {};
+
+      let normalizedImdCurrent: CurrentWeatherData | null = null;
+      let normalizedImdForecast: DailyForecastItem[] = [];
+
+      const hasCoords = Number.isFinite(latitude) && Number.isFinite(longitude);
+
+      if (hasJwt && (cleanStationId || hasCoords)) {
+        const [imdCurRes, imdFcRes] = await Promise.allSettled([
+          fetchImdCurrentApi({ stationId: cleanStationId, latitude, longitude }, signal),
+          fetchImdForecastApi({ stationId: cleanStationId, latitude, longitude }, signal),
+        ]);
+
+        if (signal.aborted) {
+          return rejectWithValue('Weather request cancelled.');
+        }
+
+        if (imdFcRes.status === 'fulfilled') {
+          imdForecast = imdFcRes.value.forecast;
+          imdForecastStationId = imdFcRes.value.stationId;
+        } else {
+          imdStationErrors.forecast =
+            imdFcRes.reason instanceof Error
+              ? imdFcRes.reason.message
+              : 'Unable to load IMD station forecast.';
+        }
+
+        if (imdCurRes.status === 'fulfilled') {
+          imdCurrentStations = imdCurRes.value.stations;
+          imdCurrent = pickBestImdCurrentStation(imdCurrentStations, {
+            explicitStationId: cleanStationId || imdCurRes.value.stationId,
+            forecastStationCode: imdForecast?.Station_Code || imdForecastStationId,
+            forecastStationName: imdForecast?.Station_Name,
+            village: loc.village,
+            district: loc.district,
+            state: loc.state,
+            label: loc.label,
+          });
+          imdCurrentStationId =
+            imdCurRes.value.stationId || imdCurrent?.['Station Id'] || cleanStationId || null;
+          normalizedImdCurrent = normalizeImdCurrentToWeatherData(imdCurrent);
+          if (!normalizedImdCurrent) {
+            imdStationErrors.current =
+              'IMD current station observation lacked temperature telemetry; using fallback.';
+          }
+        } else if (cleanStationId && hasCoords) {
+          // If explicit station_id returned 404/empty on current observation, try IMD station directory by coordinates before normal fallback
+          try {
+            const coordCur = await fetchImdCurrentApi({ latitude, longitude }, signal);
+            imdCurrentStations = coordCur.stations;
+            imdCurrent = pickBestImdCurrentStation(imdCurrentStations, {
+              explicitStationId: coordCur.stationId,
+              forecastStationCode: imdForecast?.Station_Code || imdForecastStationId,
+              forecastStationName: imdForecast?.Station_Name,
+              village: loc.village,
+              district: loc.district,
+              state: loc.state,
+              label: loc.label,
+            });
+            imdCurrentStationId =
+              coordCur.stationId || imdCurrent?.['Station Id'] || cleanStationId || null;
+            normalizedImdCurrent = normalizeImdCurrentToWeatherData(imdCurrent);
+            if (!normalizedImdCurrent) {
+              imdStationErrors.current =
+                'IMD current station observation lacked temperature telemetry; using fallback.';
+            }
+          } catch (retryErr) {
+            imdStationErrors.current =
+              retryErr instanceof Error
+                ? retryErr.message
+                : 'Unable to load IMD current station.';
+          }
+        } else {
+          imdStationErrors.current =
+            imdCurRes.reason instanceof Error
+              ? imdCurRes.reason.message
+              : 'Unable to load IMD current station.';
+        }
+
+        normalizedImdForecast = normalizeImdForecastToDailyItems(
+          imdForecast,
+          normalizedImdCurrent?.wind_speed_10m ?? 10
+        );
+        if (imdFcRes.status === 'fulfilled' && normalizedImdForecast.length === 0) {
+          imdStationErrors.forecast =
+            'IMD station forecast lacked usable daily temperatures; using fallback.';
+        }
+      }
+
+      const needFallbackCurrent = !normalizedImdCurrent;
+      const needFallbackForecast = normalizedImdForecast.length === 0;
+
+      const [fallbackCurRes, fallbackFcRes, hourlyRes] = await Promise.allSettled([
+        needFallbackCurrent
+          ? fetchCurrentWeatherApi(effectiveUserId, latitude, longitude, signal)
+          : Promise.resolve(null),
+        needFallbackForecast
+          ? fetchForecastWeatherApi(effectiveUserId, latitude, longitude, 7, signal)
+          : Promise.resolve(null),
+        hourlyPromise,
       ]);
+
+      if (signal.aborted) {
+        return rejectWithValue('Weather request cancelled.');
+      }
+
+      let finalCurrent: CurrentWeatherData | null = normalizedImdCurrent;
+      let currentSource: 'IMD' | 'FALLBACK' = 'IMD';
+      let fallbackMeta: WeatherMeta | null = null;
+
+      if (needFallbackCurrent) {
+        currentSource = 'FALLBACK';
+        if (fallbackCurRes.status === 'fulfilled' && fallbackCurRes.value) {
+          finalCurrent = fallbackCurRes.value.current;
+          fallbackMeta = fallbackCurRes.value.meta;
+        }
+      }
+
+      let finalForecast: DailyForecastItem[] = normalizedImdForecast;
+      let forecastSource: 'IMD' | 'FALLBACK' = 'IMD';
+
+      if (needFallbackForecast) {
+        forecastSource = 'FALLBACK';
+        if (fallbackFcRes.status === 'fulfilled' && fallbackFcRes.value) {
+          finalForecast = fallbackFcRes.value.forecast;
+          if (!fallbackMeta) fallbackMeta = fallbackFcRes.value.meta;
+        }
+      }
+
+      const finalHourly =
+        hourlyRes.status === 'fulfilled' && hourlyRes.value ? hourlyRes.value.hourly : [];
+      if (!fallbackMeta && hourlyRes.status === 'fulfilled' && hourlyRes.value) {
+        fallbackMeta = hourlyRes.value.meta;
+      }
+
+      if (!finalCurrent) {
+        const curErr =
+          fallbackCurRes.status === 'rejected' && fallbackCurRes.reason instanceof Error
+            ? fallbackCurRes.reason.message
+            : imdStationErrors.current || 'Unable to load current weather telemetry.';
+        return rejectWithValue(curErr);
+      }
+
+      if (finalForecast.length === 0) {
+        const fcErr =
+          fallbackFcRes.status === 'rejected' && fallbackFcRes.reason instanceof Error
+            ? fallbackFcRes.reason.message
+            : imdStationErrors.forecast || 'Unable to load weather forecast.';
+        return rejectWithValue(fcErr);
+      }
+
+      const imdLat = Number(imdForecast?.Latitude);
+      const imdLon = Number(imdForecast?.Longitude);
+      const meta: WeatherMeta = fallbackMeta || {
+        latitude: Number.isFinite(imdLat) && imdLat !== 0 ? imdLat : latitude,
+        longitude: Number.isFinite(imdLon) && imdLon !== 0 ? imdLon : longitude,
+        timezone: 'Asia/Kolkata',
+        timezone_abbreviation: 'IST',
+        elevation: 0,
+      };
 
       return {
         key,
-        current: currentRes.current,
-        forecast: forecastRes.forecast,
-        hourly: hourlyRes.hourly,
-        meta: currentRes.meta || forecastRes.meta || hourlyRes.meta,
+        current: finalCurrent,
+        forecast: finalForecast,
+        hourly: finalHourly,
+        meta,
+        weatherSource: {
+          current: currentSource,
+          forecast: forecastSource,
+        },
+        imdCurrentStations,
+        imdCurrent,
+        imdCurrentStationId,
+        imdForecast,
+        imdForecastStationId,
+        imdStationErrors,
       };
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -210,22 +453,21 @@ export const fetchWeatherBundle = createAsyncThunk<
     }
   },
   {
-    condition: ({ userId, latitude, longitude, force }, { getState }) => {
+    condition: ({ userId, latitude, longitude, stationId, force }, { getState }) => {
       if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return false;
       const { weather } = getState();
       const effectiveUserId = normalizeOptionalUserId(userId);
-      const key = buildWeatherFetchKey(effectiveUserId, latitude, longitude);
+      const key = buildWeatherFetchKey(effectiveUserId, latitude, longitude, stationId);
 
       // Avoid parallel duplicate calls (e.g. StrictMode double-invoke or rapid tab switch)
       if (weather.loading && weather.inFlightKey === key) return false;
 
-      // Return cached weather cleanly within TTL unless forced or coords changed
+      // Return cached weather cleanly within TTL unless forced, coords changed, or stationId changed
       if (
         !force &&
         weather.lastFetchedKey === key &&
         weather.current &&
         weather.forecast.length > 0 &&
-        weather.hourly.length > 0 &&
         Date.now() - weather.lastFetchedAt < WEATHER_CACHE_TTL_MS
       ) {
         return false;
@@ -385,6 +627,156 @@ export const fetchWeatherAdvisory = createAsyncThunk<
   }
 );
 
+export interface FetchImdDistrictArgs {
+  userId?: string;
+  districtId?: string;
+  latitude?: number;
+  longitude?: number;
+  force?: boolean;
+}
+
+interface FetchImdDistrictResult {
+  key: string;
+  warnings: ImdDistrictWarning | null;
+  districtId: string;
+  rainfall: ImdDistrictRainfall | null;
+  districtErrors: Pick<ImdWeatherErrors, 'warnings' | 'rainfall'>;
+}
+
+export function buildImdDistrictFetchKey(params: {
+  userId?: string;
+  districtId?: string;
+  latitude?: number;
+  longitude?: number;
+}): string {
+  const uid = normalizeOptionalUserId(params.userId) || 'auth';
+  const dist = (params.districtId || '').trim();
+  if (dist) {
+    return `${uid}|id:${dist}`;
+  }
+  const lat =
+    typeof params.latitude === 'number' && Number.isFinite(params.latitude)
+      ? params.latitude.toFixed(4)
+      : 'na';
+  const lon =
+    typeof params.longitude === 'number' && Number.isFinite(params.longitude)
+      ? params.longitude.toFixed(4)
+      : 'na';
+  return `${uid}|coords:${lat}|${lon}`;
+}
+
+/**
+ * Fetches authenticated IMD District Warnings and Rainfall Departure endpoints once in parallel
+ * using profile district_id when available or active latitude/longitude coordinates.
+ * Strictly skipped when unauthenticated, lacking both district_id and valid coords, already in-flight, or cached.
+ */
+export const fetchImdDistrictBundle = createAsyncThunk<
+  FetchImdDistrictResult,
+  FetchImdDistrictArgs,
+  { state: { weather: WeatherState }; rejectValue: string }
+>(
+  'weather/fetchImdDistrictBundle',
+  async ({ userId, districtId, latitude, longitude }, { rejectWithValue, signal }) => {
+    const cleanDistrictId = (districtId || '').trim() || undefined;
+    const hasCoords =
+      typeof latitude === 'number' &&
+      Number.isFinite(latitude) &&
+      typeof longitude === 'number' &&
+      Number.isFinite(longitude);
+
+    if (!cleanDistrictId && !hasCoords) {
+      return rejectWithValue('IMD district_id or coordinates are required.');
+    }
+    const key = buildImdDistrictFetchKey({
+      userId,
+      districtId: cleanDistrictId,
+      latitude,
+      longitude,
+    });
+
+    const [warningsRes, rainfallRes] = await Promise.allSettled([
+      fetchImdWarningsApi({ districtId: cleanDistrictId, latitude, longitude }, signal),
+      fetchImdRainfallApi({ districtId: cleanDistrictId, latitude, longitude }, signal),
+    ]);
+
+    if (signal.aborted) {
+      return rejectWithValue('IMD district weather request cancelled.');
+    }
+
+    const districtErrors: Pick<ImdWeatherErrors, 'warnings' | 'rainfall'> = {};
+    const warnings = warningsRes.status === 'fulfilled' ? warningsRes.value.warning : null;
+    const rainfall = rainfallRes.status === 'fulfilled' ? rainfallRes.value.rainfall : null;
+
+    if (warningsRes.status === 'rejected') {
+      districtErrors.warnings =
+        warningsRes.reason instanceof Error
+          ? warningsRes.reason.message
+          : 'Unable to load IMD district warnings.';
+    }
+    if (rainfallRes.status === 'rejected') {
+      districtErrors.rainfall =
+        rainfallRes.reason instanceof Error
+          ? rainfallRes.reason.message
+          : 'Unable to load IMD district rainfall.';
+    }
+
+    if (warningsRes.status === 'rejected' && rainfallRes.status === 'rejected') {
+      return rejectWithValue(
+        districtErrors.warnings || districtErrors.rainfall || 'Unable to load IMD district telemetry.'
+      );
+    }
+
+    const resolvedDistrictId =
+      (warningsRes.status === 'fulfilled' ? warningsRes.value.districtId : null) ||
+      (rainfallRes.status === 'fulfilled' ? rainfallRes.value.districtId : null) ||
+      cleanDistrictId ||
+      '';
+
+    return {
+      key,
+      warnings,
+      districtId: resolvedDistrictId,
+      rainfall,
+      districtErrors,
+    };
+  },
+  {
+    condition: ({ userId, districtId, latitude, longitude, force }, { getState }) => {
+      if (!getStoredJwt()) return false;
+      const cleanDistrictId = (districtId || '').trim() || undefined;
+      const hasCoords =
+        typeof latitude === 'number' &&
+        Number.isFinite(latitude) &&
+        typeof longitude === 'number' &&
+        Number.isFinite(longitude);
+      if (!cleanDistrictId && !hasCoords) return false;
+
+      const { weather } = getState();
+      const key = buildImdDistrictFetchKey({
+        userId,
+        districtId: cleanDistrictId,
+        latitude,
+        longitude,
+      });
+
+      if (weather.imdLoading && weather.imdInFlightKey === key) {
+        return false;
+      }
+
+      if (
+        !force &&
+        weather.imdLastFetchedKey === key &&
+        Date.now() - weather.imdLastFetchedAt < IMD_CACHE_TTL_MS &&
+        (weather.imdWarnings || weather.imdRainfall)
+      ) {
+        return false;
+      }
+
+      return true;
+    },
+  }
+);
+
 const weatherSlice = createSlice({
   name: 'weather',
   initialState,
@@ -422,20 +814,36 @@ const weatherSlice = createSlice({
     clearWeatherAdvisoryError(state) {
       if (state.advisoryError) state.advisoryError = null;
     },
+    selectImdStation(state, action: PayloadAction<string>) {
+      const targetId = action.payload.trim();
+      if (!targetId) return;
+      const found = state.imdCurrentStations.find(
+        (st) => String(st['Station Id']).trim() === targetId
+      );
+      if (found) {
+        state.imdCurrent = found;
+        state.imdCurrentStationId = String(found['Station Id']).trim();
+        const normalized = normalizeImdCurrentToWeatherData(found);
+        if (normalized) {
+          state.current = normalized;
+          state.weatherSource.current = 'IMD';
+        }
+      }
+    },
   },
   extraReducers: (builder) => {
     builder
       .addCase(fetchWeatherBundle.pending, (state, action) => {
-        const { userId, latitude, longitude } = action.meta.arg;
+        const { userId, latitude, longitude, stationId } = action.meta.arg;
         const effectiveUserId = normalizeOptionalUserId(userId);
         state.loading = true;
         state.error = null;
-        state.inFlightKey = buildWeatherFetchKey(effectiveUserId, latitude, longitude);
+        state.inFlightKey = buildWeatherFetchKey(effectiveUserId, latitude, longitude, stationId);
       })
       .addCase(fetchWeatherBundle.fulfilled, (state, action) => {
         // Ignore stale response if user switched coordinates mid-flight
-        const currentPrefix = `|${state.location.latitude.toFixed(4)}|${state.location.longitude.toFixed(4)}`;
-        if (!action.payload.key.endsWith(currentPrefix)) {
+        const currentCoordsSegment = `|${state.location.latitude.toFixed(4)}|${state.location.longitude.toFixed(4)}|`;
+        if (!action.payload.key.includes(currentCoordsSegment)) {
           return;
         }
         state.loading = false;
@@ -447,11 +855,22 @@ const weatherSlice = createSlice({
         state.forecast = action.payload.forecast;
         state.hourly = action.payload.hourly;
         state.meta = action.payload.meta;
+        state.weatherSource = action.payload.weatherSource;
+        state.imdCurrentStations = action.payload.imdCurrentStations;
+        state.imdCurrent = action.payload.imdCurrent;
+        state.imdCurrentStationId = action.payload.imdCurrentStationId;
+        state.imdForecast = action.payload.imdForecast;
+        state.imdForecastStationId = action.payload.imdForecastStationId;
+        state.imdSectionErrors = {
+          warnings: state.imdSectionErrors.warnings,
+          rainfall: state.imdSectionErrors.rainfall,
+          ...action.payload.imdStationErrors,
+        };
       })
       .addCase(fetchWeatherBundle.rejected, (state, action) => {
-        const { userId, latitude, longitude } = action.meta.arg;
+        const { userId, latitude, longitude, stationId } = action.meta.arg;
         const effectiveUserId = normalizeOptionalUserId(userId);
-        const rejectedKey = buildWeatherFetchKey(effectiveUserId, latitude, longitude);
+        const rejectedKey = buildWeatherFetchKey(effectiveUserId, latitude, longitude, stationId);
         if (state.inFlightKey && state.inFlightKey !== rejectedKey) {
           return;
         }
@@ -642,6 +1061,101 @@ const weatherSlice = createSlice({
             .join(', ');
           saveWeatherLocationStorage(state.location);
         }
+      })
+      .addCase(fetchUserProfile.fulfilled, (state, action) => {
+        const u = action.payload.user;
+        if (
+          (state.location.source === 'default' || state.location.source === 'profile') &&
+          typeof u.latitude === 'number' &&
+          Number.isFinite(u.latitude) &&
+          typeof u.longitude === 'number' &&
+          Number.isFinite(u.longitude)
+        ) {
+          const nextLoc: WeatherLocation = {
+            latitude: u.latitude,
+            longitude: u.longitude,
+            label: formatLocationLabel({
+              village: u.village,
+              district: u.district,
+              state: u.state,
+              country: u.country,
+              latitude: u.latitude,
+              longitude: u.longitude,
+            }),
+            country: u.country,
+            state: u.state,
+            district: u.district,
+            village: u.village,
+            pincode: u.pincode,
+            source: 'profile',
+          };
+          state.location = nextLoc;
+          state.pendingAddressQuery = null;
+          saveWeatherLocationStorage(nextLoc);
+        }
+      })
+      .addCase(fetchImdDistrictBundle.pending, (state, action) => {
+        const arg = action.meta.arg;
+        state.imdLoading = true;
+        state.imdError = null;
+        state.imdInFlightKey = buildImdDistrictFetchKey({
+          userId: arg.userId,
+          districtId: arg.districtId,
+          latitude: arg.latitude,
+          longitude: arg.longitude,
+        });
+      })
+      .addCase(fetchImdDistrictBundle.fulfilled, (state, action) => {
+        state.imdLoading = false;
+        state.imdError = null;
+        state.imdInFlightKey = null;
+        state.imdLastFetchedKey = action.payload.key;
+        state.imdLastFetchedAt = Date.now();
+        state.imdWarnings = action.payload.warnings;
+        state.imdDistrictId = action.payload.districtId;
+        state.imdRainfall = action.payload.rainfall;
+        state.imdSectionErrors = {
+          current: state.imdSectionErrors.current,
+          forecast: state.imdSectionErrors.forecast,
+          ...action.payload.districtErrors,
+        };
+      })
+      .addCase(fetchImdDistrictBundle.rejected, (state, action) => {
+        const arg = action.meta.arg;
+        const rejectedKey = buildImdDistrictFetchKey({
+          userId: arg.userId,
+          districtId: arg.districtId,
+          latitude: arg.latitude,
+          longitude: arg.longitude,
+        });
+        if (state.imdInFlightKey && state.imdInFlightKey !== rejectedKey) {
+          return;
+        }
+        state.imdLoading = false;
+        state.imdInFlightKey = null;
+        if (!action.meta.condition) {
+          state.imdError = action.payload || 'Unable to load IMD district weather services.';
+        }
+      })
+      .addCase(logout, (state) => {
+        state.imdCurrentStations = [];
+        state.imdCurrent = null;
+        state.imdCurrentStationId = null;
+        state.imdForecast = null;
+        state.imdForecastStationId = null;
+        state.imdWarnings = null;
+        state.imdDistrictId = null;
+        state.imdRainfall = null;
+        state.imdLoading = false;
+        state.imdError = null;
+        state.imdSectionErrors = {};
+        state.imdLastFetchedKey = null;
+        state.imdInFlightKey = null;
+        state.imdLastFetchedAt = 0;
+        state.weatherSource = {
+          current: null,
+          forecast: null,
+        };
       });
   },
 });
@@ -653,6 +1167,7 @@ export const {
   clearWeatherError,
   setAdvisoryCropStage,
   clearWeatherAdvisoryError,
+  selectImdStation,
 } = weatherSlice.actions;
 
 // Primitive & memoized selectors prevent unnecessary re-renders
@@ -686,8 +1201,9 @@ export const selectWeatherUi = createSelector(
     (state: { weather: WeatherState }) => state.weather.loading,
     (state: { weather: WeatherState }) => state.weather.error,
     (state: { weather: WeatherState }) => state.weather.lastFetchedAt,
+    (state: { weather: WeatherState }) => state.weather.weatherSource,
   ],
-  (location, meta, current, forecast, hourly, loading, error, lastFetchedAt) => ({
+  (location, meta, current, forecast, hourly, loading, error, lastFetchedAt, weatherSource) => ({
     location,
     meta,
     current,
@@ -696,6 +1212,7 @@ export const selectWeatherUi = createSelector(
     loading,
     error,
     lastFetchedAt,
+    weatherSource,
   })
 );
 
@@ -713,6 +1230,50 @@ export const selectWeatherAdvisoryUi = createSelector(
     advisoryError,
     advisoryCropStage,
     lastAdvisoryFetchedAt,
+  })
+);
+
+export const selectWeatherImdUi = createSelector(
+  [
+    (state: { weather: WeatherState }) => state.weather.imdCurrentStations,
+    (state: { weather: WeatherState }) => state.weather.imdCurrent,
+    (state: { weather: WeatherState }) => state.weather.imdCurrentStationId,
+    (state: { weather: WeatherState }) => state.weather.imdForecast,
+    (state: { weather: WeatherState }) => state.weather.imdForecastStationId,
+    (state: { weather: WeatherState }) => state.weather.imdWarnings,
+    (state: { weather: WeatherState }) => state.weather.imdDistrictId,
+    (state: { weather: WeatherState }) => state.weather.imdRainfall,
+    (state: { weather: WeatherState }) => state.weather.imdLoading,
+    (state: { weather: WeatherState }) => state.weather.imdError,
+    (state: { weather: WeatherState }) => state.weather.imdSectionErrors,
+    (state: { weather: WeatherState }) => state.weather.weatherSource,
+  ],
+  (
+    stations,
+    current,
+    currentStationId,
+    forecast,
+    forecastStationId,
+    warnings,
+    districtId,
+    rainfall,
+    loading,
+    error,
+    sectionErrors,
+    weatherSource
+  ) => ({
+    stations,
+    current,
+    currentStationId,
+    forecast,
+    forecastStationId,
+    warnings,
+    districtId,
+    rainfall,
+    loading,
+    error,
+    sectionErrors,
+    weatherSource,
   })
 );
 

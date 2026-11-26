@@ -107,7 +107,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
                   className="inline-flex items-center gap-2 bg-[#113E2E] hover:bg-[#0a291f] text-white text-base font-bold px-7 py-3.5 rounded-xl shadow-md hover:shadow-lg transition duration-200 group"
                 >
                   <span>{t('landing.launchWorkspace')}</span>
-                  <span className="material-symbols-outlined text-lg group-hover:translate-x-1 transition-transform">
+                  <span className="material-symbols-outlined notranslate text-lg group-hover:translate-x-1 transition-transform select-none" translate="no" aria-hidden="true">
                     arrow_forward
                   </span>
                 </button>
@@ -115,7 +115,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
                   onClick={onOpenDostAi}
                   className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-[#113E2E] border border-slate-300 font-bold px-6 py-3.5 rounded-xl shadow-xs transition"
                 >
-                  <span className="material-symbols-outlined text-emerald-700">chat</span>
+                  <span className="material-symbols-outlined notranslate text-emerald-700 select-none" translate="no" aria-hidden="true">chat</span>
                   <span>{t('landing.askDostAiDemo')}</span>
                 </button>
               </div>
@@ -160,7 +160,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
                 {/* Floating Badge 1: Crop Health */}
                 <div className="absolute -top-3 -left-4 sm:-left-8 bg-white/95 backdrop-blur-md p-3.5 rounded-2xl shadow-lg border border-emerald-100 flex items-start gap-3 max-w-[240px]">
                   <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0 text-[#113E2E]">
-                    <span className="material-symbols-outlined text-lg">check_circle</span>
+                    <span className="material-symbols-outlined notranslate text-lg select-none" translate="no" aria-hidden="true">check_circle</span>
                   </div>
                   <div>
                     <div className="flex items-center gap-1.5">
@@ -174,7 +174,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
                 {/* Floating Badge 2: Pest Warning */}
                 <div className="absolute top-1/2 -right-4 sm:-right-8 -translate-y-1/2 bg-white/95 backdrop-blur-md p-3.5 rounded-2xl shadow-lg border border-red-100 flex items-start gap-3 max-w-[240px]">
                   <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center shrink-0 text-red-600">
-                    <span className="material-symbols-outlined text-lg">warning</span>
+                    <span className="material-symbols-outlined notranslate text-lg select-none" translate="no" aria-hidden="true">warning</span>
                   </div>
                   <div>
                     <span className="text-xs font-bold text-red-900">Pest Risk Warning</span>
@@ -185,7 +185,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
                 {/* Floating Badge 3: Mandi Price Alert */}
                 <div className="absolute -bottom-4 left-6 bg-white/95 backdrop-blur-md p-3.5 rounded-2xl shadow-lg border border-amber-100 flex items-start gap-3 max-w-[260px]">
                   <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center shrink-0 text-amber-800">
-                    <span className="material-symbols-outlined text-lg">trending_up</span>
+                    <span className="material-symbols-outlined notranslate text-lg select-none" translate="no" aria-hidden="true">trending_up</span>
                   </div>
                   <div>
                     <div className="flex items-center gap-1">
@@ -225,7 +225,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
               >
                 <div>
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${feat.color} group-hover:scale-105 transition-transform`}>
-                    <span className="material-symbols-outlined text-2xl">{feat.icon}</span>
+                    <span className="material-symbols-outlined notranslate text-2xl select-none" translate="no" aria-hidden="true">{feat.icon}</span>
                   </div>
                   <h3 className="font-bold text-base text-slate-900 group-hover:text-[#113E2E] transition-colors">
                     {feat.title}
@@ -236,7 +236,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
                 </div>
                 <div className="mt-5 pt-3 border-t border-slate-200/60 flex items-center gap-1 text-xs font-bold text-[#113E2E] group-hover:text-emerald-700">
                   <span>Open Tool</span>
-                  <span className="material-symbols-outlined text-sm group-hover:translate-x-1 transition-transform">arrow_forward</span>
+                  <span className="material-symbols-outlined notranslate text-sm group-hover:translate-x-1 transition-transform select-none" translate="no" aria-hidden="true">arrow_forward</span>
                 </div>
               </div>
             ))}
@@ -339,7 +339,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
               className="px-8 py-4 rounded-xl bg-[#E5B54F] hover:bg-[#d8a53a] text-[#113E2E] font-bold text-base shadow-lg transition-transform hover:scale-105 flex items-center gap-2"
             >
               <span>{t('landing.enterWorkspace')}</span>
-              <span className="material-symbols-outlined text-lg">agriculture</span>
+              <span className="material-symbols-outlined notranslate text-lg select-none" translate="no" aria-hidden="true">agriculture</span>
             </button>
           </div>
         </div>
